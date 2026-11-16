@@ -1,0 +1,16 @@
+# k3d cluster used for local testing of the Helm chart (make k3d-up).
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: statline
+servers: 1
+agents: 2
+image: rancher/k3s:v1.30.6-k3s1   # same minor as AKS (proposal: 1.30)
+ports:
+  - port: 8080:80
+    nodeFilters: [loadbalancer]
+options:
+  k3s:
+    extraArgs:
+      - arg: --disable=traefik
+        nodeFilters: ["server:*"]
