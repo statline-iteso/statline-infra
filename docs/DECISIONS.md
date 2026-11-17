@@ -28,6 +28,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-13 | 2026-11-16 | k3d (k3s 1.30) for local clusters, Traefik disabled in favor of ingress-nginx | Decided |
 | D-14 | 2026-11-16 | Docs in English; course-delivery sections and domain names in Spanish | Decided |
 | D-15 | 2026-11-16 | `develop` is the default branch; `main` only receives `release/*` and `hotfix/*` | Decided |
+| D-21 | 2026-11-16 | Observability from the chart: ServiceMonitors for api and predicciones, PrometheusRule, Grafana dashboards as labelled ConfigMaps; ingesta health from kube-state-metrics, not a scrape | Decided |
 
 ## 2. Details
 
@@ -64,12 +65,16 @@ The chart lives at `gitops/charts/statline` so the Redis chart can sit beside it
 ### D-12 · Migrations in an initContainer
 `prisma migrate deploy` is idempotent and takes an advisory lock, so two replicas starting together don't race. Rolling back an image does **not** roll back the schema; migrations must be backward compatible (expand, then contract).
 
+### D-21 · Observability from the chart
+Scrape targets, alerts and dashboards are part of the environment chart, so they ship with the same Argo CD sync and values as everything else. `monitoring.enabled` gates them: k3d has no Prometheus Operator CRDs and stays off. **Ingesta is not scraped:** its CronJobs are short-lived and only `serve` mode exposes metrics, which no Deployment runs. Its health comes from kube-state-metrics (`kube_job_status_failed` joined to `kube_job_owner`, and `kube_cronjob_status_last_successful_time`). **Dashboards are per environment:** uids carry the environment and ConfigMap keys carry the namespace, so the Grafana sidecar, which watches all namespaces, does not overwrite one environment's dashboard with the other's. **Trade-off:** `serviceMonitorSelectorNilUsesHelmValues=false` is needed for the ServiceMonitors, but the PrometheusRule still needs the `release: kube-prometheus-stack` label. Failed-Job alerts clear only when the CronJob history removes the Job.
+
 ## 3. Known limitations
 
 - **AKS 1.30** is what the proposal specifies. Check `az aks get-versions -l <region>` before the first apply: if 1.30 is no longer offered in standard support, use the oldest available minor and record it here.
 - `make destroy` deletes the database. Until backups to a storage account exist, dump before destroying.
 - The `plan` job in CI is skipped until the Azure OIDC app registration and the repo secrets exist (docs/pendientes.md).
 - No WAF, no private AKS API server (cost and complexity).
+- The api has no `statline_cache_requests_total` metric yet (D-21): the cache panels show No data. The HPA panels show No data until the HPA exists (SL-55).
 
 ## 4. Future work
 

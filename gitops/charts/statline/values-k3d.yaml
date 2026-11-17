@@ -11,6 +11,10 @@ ingress:
   tls:
     enabled: false
 
+# No Prometheus Operator CRDs in k3d.
+monitoring:
+  enabled: false
+
 redis:
   dbIndex: 1
 

@@ -7,7 +7,8 @@ Everything the cluster runs for StatLine, rendered by Argo CD from this repo.
 ```
 gitops/
 ├── charts/
-│   ├── statline/            environment chart: web, api, predicciones, ingesta CronJobs, Ingress, secrets
+│   ├── statline/            environment chart: web, api, predicciones, ingesta CronJobs, Ingress, secrets, monitoring
+│   │   ├── dashboards/              Grafana dashboards (JSON), loaded as ConfigMaps when monitoring is on
 │   │   ├── values.yaml              documented defaults (not renderable alone: image tags are required)
 │   │   ├── values-staging.yaml      statline-staging, follows develop
 │   │   ├── values-prod.yaml         statline-prod, follows main
@@ -26,7 +27,7 @@ Image tags are `<component>.image.tag` in `values-staging.yaml` and `values-prod
 
 ```bash
 make helm-lint        # helm lint --strict, every chart and environment values file
-make helm-validate    # helm template | kubeconform -strict, plus the Argo CD and plataforma manifests
+make helm-validate    # helm template | kubeconform -strict, monitoring off and on, plus the Argo CD and plataforma manifests
 helm template statline gitops/charts/statline -f gitops/charts/statline/values-staging.yaml
 ```
 
@@ -73,4 +74,8 @@ The synced Secret exists only while a pod mounts the CSI volume. Every pod that 
 
 ## Not here yet
 
-HPA, NetworkPolicies, PodDisruptionBudgets, ServiceMonitors and smoke-test hooks are separate tasks. Add them as new templates under `charts/statline/templates/` gated by their own values section.
+HPA, NetworkPolicies, PodDisruptionBudgets and smoke-test hooks are separate tasks. Add them as new templates under `charts/statline/templates/` gated by their own values section.
+
+## Monitoring
+
+`monitoring.enabled` (true in staging and prod, false in k3d) renders two ServiceMonitors (api, predicciones), the `<release>-alerts` PrometheusRule and two Grafana dashboard ConfigMaps. Thresholds and the extra labels are under `monitoring` in `values.yaml`. The dashboards read `dashboards/*.json`; they are validated with `python3 -m json.tool`. Architecture and metric names: ARCHITECTURE section 4.5.
