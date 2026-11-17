@@ -1,0 +1,22 @@
+# ingress-nginx for AKS. The Service takes the static public IP from principal (the LB lives in
+# the MC_ node resource group, the IP in rg-statline: hence the resource-group annotation).
+controller:
+  replicaCount: 1
+  ingressClassResource:
+    name: nginx
+    default: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 90Mi
+    limits:
+      memory: 256Mi
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  service:
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-resource-group: "${grupo_recurso}"
+      service.beta.kubernetes.io/azure-pip-name: "${nombre_ip}"
+      service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: /healthz

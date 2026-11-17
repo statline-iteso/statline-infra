@@ -47,3 +47,19 @@ output "log_analytics_workspace_name" {
   description = "Log Analytics workspace name; query it with az monitor log-analytics query."
   value       = module.observabilidad.log_analytics_workspace_name
 }
+
+output "ingress_public_ip" {
+  description = "Static public IP of the ingress-nginx load balancer (point DNS here, or use it when no domain is set)."
+  value       = azurerm_public_ip.ingress.ip_address
+}
+
+output "dns_name_servers" {
+  description = "Name servers of the DNS zone to delegate at the registrar. Null when dominio is not set."
+  value       = one(module.dns[*].name_servers)
+}
+
+output "grafana_admin_password" {
+  description = "Grafana admin password (user admin). Read with: terraform output -raw grafana_admin_password. Not written to any file."
+  value       = module.plataforma.grafana_admin_password
+  sensitive   = true
+}

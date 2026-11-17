@@ -7,7 +7,7 @@ What runs where, how it gets there, and the contracts with the backend and front
 ```
                 Internet
                    │ 80/443
-         ┌─────────▼──────────┐  (planned SL-12)  public IP + DNS A record
+         ┌─────────▼──────────┐  static public IP (rg-statline) + DNS A record (if dominio)
          │   ingress-nginx    │  TLS from cert-manager (Let's Encrypt)
          └───┬───────────┬────┘
    /         │           │  /api
@@ -44,8 +44,9 @@ One AKS cluster, three namespaces: `plataforma` (shared charts), `statline-stagi
 | `datos` | done | `psql-statline-<5>` PostgreSQL 16 `B_Standard_B1ms`, 32 GiB auto-grow, 7-day backups, private access only, `require_secure_transport=on` · databases `statline_staging` and `statline_prod` (`prevent_destroy`, D-16) · admin password from `random_password` |
 | `seguridad` | done | `kv-statline-<5>` Standard, RBAC (`rbac_authorization_enabled`), soft delete 7 days, purge protection off, public access with default Allow (D-18) · *Key Vault Secrets Officer* for the deployer · *Key Vault Secrets User* for the CSI add-on identity · secrets below |
 | `observabilidad` | planned (SL-10) | `log-statline` (30 days) · `diagnostic_settings` for AKS, PostgreSQL, Key Vault · AKS `oms_agent` |
-| `dns` | planned (SL-12) | `dns_zone` · `public_ip` for the ingress (in the node resource group) · A record |
-| `plataforma` | planned (SL-12) | `helm_release`: ingress-nginx, cert-manager, argo-cd, kube-prometheus-stack, redis (Bitnami) — all in `plataforma` |
+| `principal` (SL-12) | done | `azurerm_public_ip.ingress` (Standard, Static, `rg-statline`) · `azurerm_role_assignment` Network Contributor on `rg-statline` for the AKS identity · `kubernetes`/`helm` providers from `module.aks.kube_config` |
+| `dns` | done (SL-12, only if `dominio` is set) | `azurerm_dns_zone` `dominio` · A records `@` and `staging` → ingress IP (TTL 300) |
+| `plataforma` | done (SL-12) | `kubernetes_namespace` ×3 (`plataforma`, `statline-staging`, `statline-prod`, label `statline.io/ambiente`) · `random_password` Grafana · `helm_release`: ingress-nginx 4.15.1, cert-manager v1.21.3, argo-cd 10.11.6, kube-prometheus-stack 92.16.0 — all in `plataforma`. Redis is a StatefulSet in the GitOps chart (D-16) |
 
 Outputs other repos or the chart rely on: `aks_cluster_name`, `resource_group_name`, `key_vault_csi_identity_client_id`, `postgres_fqdn`, `key_vault_name`, `key_vault_uri`, `tenant_id` (for the SecretProviderClass). `database_url` was removed: the URLs live only in Key Vault. Renaming one is a contract change.
 
@@ -71,6 +72,7 @@ The Kubernetes Secret `statline-secrets` maps these to the env names the images 
 Outputs other repos or the chart rely on: `aks_cluster_name`, `resource_group_name`, `key_vault_csi_identity_client_id`, `postgres_fqdn`, `database_url` (sensitive), `log_analytics_workspace_id`, `log_analytics_workspace_name`. Renaming one is a contract change.
 
 **Key Vault diagnostics (pending):** the `seguridad` module (SL-09) is on a parallel branch. Once both merge, add `kv = { resource_id = module.seguridad.key_vault_id }` to `recursos_diagnostico` in `principal/main.tf` (module observabilidad, SL-10 follow-up). Until then Key Vault logs are not sent to Log Analytics.
+Outputs other repos or the chart rely on: `aks_cluster_name`, `resource_group_name`, `key_vault_csi_identity_client_id`, `postgres_fqdn`, `database_url` (sensitive), `ingress_public_ip`, `dns_name_servers` (null without `dominio`), `grafana_admin_password` (sensitive). Renaming one is a contract change.
 
 ### Why private access for PostgreSQL
 
@@ -82,7 +84,7 @@ With a delegated subnet the server has no public endpoint, so the proposal's "fi
 |---|---|---|
 | Namespace | 3 | `plataforma`, `statline-staging`, `statline-prod` |
 | Deployment | 3 per env | `web` (2 replicas), `api`, `predicciones` |
-| StatefulSet | 1 | Redis (Bitnami chart, in `plataforma`) |
+| StatefulSet | 1 | Redis 7 (our own manifest in the GitOps chart, in `plataforma`; not a Bitnami chart, D-16) |
 | CronJob | 3 per env | `ingesta-basquetbol` `0 8 * * *` · `ingesta-americano` `0 8 * * 2` · `ingesta-futbol` `0 8 * * 1,5` (UTC) |
 | Service | 4 | ClusterIP for web, api, predicciones and Redis |
 | Ingress | 1 per env | `/` → web, `/api` → api; TLS via cert-manager |
@@ -125,7 +127,7 @@ CronJob args: `["run", "basquetbol"]`, `["run", "americano"]`, `["run", "futbol"
 
 | Task | How |
 |---|---|
-| First deploy | `make bootstrap` → `make plan` → `make apply` → `az aks get-credentials` |
+| First deploy | `make bootstrap` → `make apply-aks` → `make plan` → `make apply` → `az aks get-credentials` (D-20) |
 | Daily stop | `make destroy` (data is lost unless dumped: `pg_dump` through a client pod first) |
 | DB shell | `kubectl run psql --rm -it --image=postgres:16-alpine -- psql "$DATABASE_URL"` |
 | Rotate a secret | update it in Key Vault; the CSI driver re-syncs within 5 min; restart the Deployment |

@@ -37,3 +37,14 @@ variable "log_analytics_daily_quota_gb" {
     error_message = "Must be greater than 0."
   }
 }
+
+variable "dominio" {
+  type        = string
+  description = "Public domain (e.g. statline.example). Null until it is decided: then module dns is not created and no DNS zone is billed."
+  default     = null
+
+  validation {
+    condition     = var.dominio == null || can(regex("^([a-z0-9-]+\\.)+[a-z]{2,}$", var.dominio))
+    error_message = "Use a lowercase domain without scheme or trailing dot, e.g. statline.example."
+  }
+}

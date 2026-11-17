@@ -47,12 +47,12 @@ Out of scope: fantasy-platform sync (ESPN, Yahoo), betting odds, multi-region, s
 
 | Concern | Choice |
 |---|---|
-| IaC | **Terraform** ≥ 1.9, `azurerm` ~> 4.14, `random` ~> 3.6; *(planned)* `kubernetes` and `helm` providers. State in Azure Storage with blob-lease locking (`use_azuread_auth`) |
+| IaC | **Terraform** ≥ 1.9, `azurerm` ~> 4.14, `random` ~> 3.6; `kubernetes` ~> 2.33 and `helm` ~> 2.16 providers (configured from module aks). State in Azure Storage with blob-lease locking (`use_azuread_auth`) |
 | Kubernetes | **AKS 1.30**, node pool 2→4 × `Standard_B2s`, Azure CNI, Azure network policy, OIDC issuer + workload identity, Key Vault CSI add-on |
 | Data | **PostgreSQL 16** Flexible Server `B_Standard_B1ms`, private access only (delegated subnet + private DNS zone) |
 | Secrets | **Azure Key Vault** + Secrets Store CSI Driver (`SecretProviderClass`) |
 | Ingress | **ingress-nginx** + **cert-manager** (Let's Encrypt) |
-| Cache | **Redis 7** (Bitnami chart in AKS) |
+| Cache | **Redis 7** (own StatefulSet in the GitOps chart; D-16) |
 | GitOps | **Argo CD**; Helm chart with `values-staging.yaml` / `values-prod.yaml` |
 | Observability | **kube-prometheus-stack** (Prometheus, Grafana), Log Analytics + diagnostic settings |
 | Images | **Docker Hub**: `statline/web`, `statline/api`, `statline/predicciones`, `statline/ingesta` (short SHA + SemVer) |
@@ -88,7 +88,7 @@ statline-infra/
 │       ├── seguridad/       Key Vault, secrets, access                      (SL-09)
 │       ├── observabilidad/  Log Analytics, diagnostic settings              (SL-10)
 │       ├── dns/             DNS zone, A record to the ingress IP            (SL-12)
-│       └── plataforma/      five helm_release                               (SL-12)
+│       └── plataforma/      namespaces, four helm_release                    (SL-12)
 ├── gitops/                  (SL-53) Helm chart + values per environment + Argo CD Applications
 ├── k3d/                     local cluster config
 ├── scripts/                 backend-config.sh · k3d-up.sh
