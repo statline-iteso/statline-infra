@@ -28,6 +28,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-13 | 2026-11-16 | k3d (k3s 1.30) for local clusters, Traefik disabled in favor of ingress-nginx | Decided |
 | D-14 | 2026-11-16 | Docs in English; course-delivery sections and domain names in Spanish | Decided |
 | D-15 | 2026-11-16 | `develop` is the default branch; `main` only receives `release/*` and `hotfix/*` | Decided |
+| D-21 | 2026-11-16 | App repos only build and push images and send `repository_dispatch`; this repo's `cd.yml` writes the tags with yq and pushes them with `GITHUB_TOKEN` (needs a branch-protection bypass for `github-actions[bot]`, see D-21 details) | Decided |
 
 ## 2. Details
 
@@ -60,6 +61,15 @@ The chart lives at `gitops/charts/statline` so the Redis chart can sit beside it
 
 ### D-20 · Backend contract knobs and ingestion launcher
 `CACHE_TTL_S`, `RATE_LIMIT_PER_MIN`, `RATE_LIMIT_LOGIN_PER_MIN`, `INGESTA_LANZADOR`, `THESPORTSDB_API_KEY` and `FALLBACK_HABILITADO` are ConfigMap values; `BALLDONTLIE_API_KEY` is an optional Secret key. The api ServiceAccount token and a namespaced Role/RoleBinding (`get` cronjobs, `create` jobs) are rendered only when `api.ingestaLanzador: kubernetes`, so the default pod has no API server access. `FALLBACK_HABILITADO` is `"false"` in staging and prod because fallback data can duplicate games. The api migrate initContainer keeps `secretKeyRef` for `DATABASE_URL`: the pod mounts the CSI volume, volumes are mounted before container env is resolved, so the synced Secret exists in time. **Trade-off:** the first pod after a fresh install may show a short `CreateContainerConfigError` while the driver syncs.
+
+### D-21 · Tag bumps pushed by the bot, not by a PR
+
+The app repos send the new tags with `repository_dispatch` and this repo commits them, so each deploy is one commit on `develop` or `main`. Two ways to satisfy the branch protection rules (no direct pushes):
+
+1. **Implemented:** allow `github-actions[bot]` to push to `develop` and `main` in the branch protection rules. Simple, but the bot bypasses the PR review for tag bumps only; nothing else is relaxed.
+2. **Alternative:** open a PR with the bump and enable auto-merge (`gh pr merge --auto --squash`). Keeps protections intact, needs a `contents: write` + `pull-requests: write` token and auto-merge enabled on the repo; the Argo CD sync waits for the merge.
+
+If option 1 is not available, switch the `Bump tags` step to option 2.
 
 ### D-12 · Migrations in an initContainer
 `prisma migrate deploy` is idempotent and takes an advisory lock, so two replicas starting together don't race. Rolling back an image does **not** roll back the schema; migrations must be backward compatible (expand, then contract).

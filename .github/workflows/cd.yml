@@ -1,0 +1,128 @@
+name: CD
+
+# Proposal §4.3, step 2 (GitOps part): an app repo pushes its images to Docker Hub and sends
+# repository_dispatch `bump-image`. This workflow writes the new tags into the values file of
+# that environment (staging → develop, prod → main), lints the chart and pushes the commit.
+# Argo CD then syncs the cluster from the branch. Manual runs use workflow_dispatch.
+#
+# Pushes use the default GITHUB_TOKEN, so the branches must let github-actions[bot] push
+# (see docs/pendientes.md). Without that the push fails and the run is red.
+
+on:
+  repository_dispatch:
+    types: [bump-image]
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Environment to bump
+        type: choice
+        required: true
+        options: [staging, prod]
+      image:
+        description: Image to bump
+        type: choice
+        required: true
+        options: [web, api, predicciones, ingesta]
+      tag:
+        description: 7 lowercase hex chars (short SHA) or vX.Y.Z
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    name: bump image tags · ${{ github.event_name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      EVENT_NAME: ${{ github.event_name }}
+      PAYLOAD_ENV: ${{ github.event.client_payload.env }}
+      PAYLOAD_SOURCE: ${{ github.event.client_payload.source_repo }}
+      PAYLOAD_SHA: ${{ github.event.client_payload.sha }}
+      INPUT_ENV: ${{ inputs.env }}
+      INPUT_IMAGE: ${{ inputs.image }}
+      INPUT_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Validate the request and resolve the target branch
+        id: target
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
+            env_name=$PAYLOAD_ENV
+            source_repo=$PAYLOAD_SOURCE
+            sha=$PAYLOAD_SHA
+            case "$source_repo" in
+              statline-iteso/statline-backend | statline-iteso/statline-frontend) ;;
+              *) echo "::error::Dispatch from unexpected repository '$source_repo'"; exit 1 ;;
+            esac
+            if [[ -n "$sha" && ! "$sha" =~ ^[0-9a-f]{7,40}$ ]]; then
+              echo "::error::Invalid sha in payload"; exit 1
+            fi
+            jq -r '.client_payload.images | to_entries[] | "\(.key) \(.value)"' \
+              "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pairs.txt"
+          else
+            env_name=$INPUT_ENV
+            source_repo="manual run"
+            sha=""
+            printf '%s %s\n' "$INPUT_IMAGE" "$INPUT_TAG" > "$RUNNER_TEMP/pairs.txt"
+          fi
+          case "$env_name" in
+            staging) branch=develop ;;
+            prod) branch=main ;;
+            *) echo "::error::Invalid environment '$env_name' (staging|prod)"; exit 1 ;;
+          esac
+          {
+            echo "env=$env_name"
+            echo "branch=$branch"
+            echo "source=$source_repo"
+            echo "sha=$sha"
+          } >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/pairs.txt"
+
+      - name: Checkout the environment branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.branch }}
+
+      - name: yq (pinned)
+        uses: mikefarah/yq@v4.44.3
+
+      - name: Helm (pinned, same as mise.toml)
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: Bump tags, lint, commit and push (retries when the branch moved)
+        env:
+          ENV_NAME: ${{ steps.target.outputs.env }}
+          BRANCH: ${{ steps.target.outputs.branch }}
+          SOURCE: ${{ steps.target.outputs.source }}
+          SOURCE_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          values="gitops/charts/statline/values-${ENV_NAME}.yaml"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            git fetch --quiet origin "$BRANCH"
+            git reset --quiet --hard "origin/$BRANCH"
+            subject=$(scripts/bump-image-tags.sh "$ENV_NAME" "$values" "$RUNNER_TEMP/pairs.txt")
+            if git diff --quiet -- "$values"; then
+              echo "Tags already set on $BRANCH; nothing to commit."
+              exit 0
+            fi
+            helm lint --strict gitops/charts/statline -f "$values"
+            git add "$values"
+            git commit --quiet -m "$subject" -m "Source: ${SOURCE} ${SOURCE_SHA}"
+            if git push --quiet origin "HEAD:$BRANCH"; then
+              echo "Pushed: $subject"
+              exit 0
+            fi
+            echo "Push rejected (branch moved); retrying (attempt $attempt)" >&2
+            sleep $((attempt * 5))
+          done
+          echo "::error::Could not push the tag bump after 5 attempts"
+          exit 1

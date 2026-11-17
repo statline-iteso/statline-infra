@@ -1,6 +1,5 @@
 # Environment: statline-prod, follows branch main (Argo CD Application statline-prod).
 environment: prod
-
 ingress:
   # Placeholder: replace with the real domain before deploying.
   host: "<dominio>"
@@ -8,10 +7,8 @@ ingress:
     enabled: true
     secretName: statline-tls
     clusterIssuer: letsencrypt-prod
-
 redis:
   dbIndex: 0
-
 secrets:
   csi:
     keyvaultName: kv-statline-REPLACE
@@ -23,7 +20,6 @@ secrets:
       JWT_REFRESH_SECRET: jwt-refresh-secret-prod
       API_SPORTS_KEY: api-sports-key
       BALLDONTLIE_API_KEY: balldontlie-api-key
-
 # Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
 web:
   image:
