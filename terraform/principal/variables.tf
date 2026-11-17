@@ -26,3 +26,14 @@ variable "owner" {
   description = "Value of the Owner tag."
   default     = "statline-iteso"
 }
+
+variable "log_analytics_daily_quota_gb" {
+  type        = number
+  description = "Daily ingestion cap for Log Analytics (GB). Protects the student credit."
+  default     = 0.5
+
+  validation {
+    condition     = var.log_analytics_daily_quota_gb > 0
+    error_message = "Must be greater than 0."
+  }
+}

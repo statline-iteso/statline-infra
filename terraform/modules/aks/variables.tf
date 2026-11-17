@@ -52,6 +52,12 @@ variable "node_max_count" {
   }
 }
 
+variable "log_analytics_workspace_id" {
+  type        = string
+  description = "Log Analytics workspace for the oms_agent (Container Insights). null disables it (module observabilidad)."
+  default     = null
+}
+
 variable "tags" {
   type        = map(string)
   description = "Tags for every resource."

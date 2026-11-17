@@ -33,3 +33,8 @@ output "database_urls" {
   }
   sensitive = true
 }
+
+output "server_id" {
+  description = "PostgreSQL Flexible Server id (diagnostic settings in module observabilidad)."
+  value       = azurerm_postgresql_flexible_server.main.id
+}

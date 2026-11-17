@@ -2,3 +2,4 @@
 subscription_id = "00000000-0000-0000-0000-000000000000"
 location        = "eastus2"
 # kubernetes_version = "1.30"   # check: az aks get-versions -l eastus2 -o table
+# log_analytics_daily_quota_gb = 0.5    # GB/day cap on Log Analytics ingestion
