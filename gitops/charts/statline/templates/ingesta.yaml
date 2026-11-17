@@ -6,6 +6,8 @@ TEMPORADA_BASQUETBOL: {{ .Values.ingesta.config.temporadaBasquetbol | quote }}
 TEMPORADA_AMERICANO: {{ .Values.ingesta.config.temporadaAmericano | quote }}
 TEMPORADA_FUTBOL: {{ .Values.ingesta.config.temporadaFutbol | quote }}
 API_SPORTS_DAILY_QUOTA: {{ .Values.ingesta.config.apiSportsDailyQuota | quote }}
+THESPORTSDB_API_KEY: {{ .Values.ingesta.config.thesportsdbApiKey | toString | quote }}
+FALLBACK_HABILITADO: {{ .Values.ingesta.config.fallbackHabilitado | toString | quote }}
 {{- end -}}
 apiVersion: v1
 kind: ServiceAccount
@@ -63,7 +65,7 @@ spec:
                 - configMapRef:
                     name: {{ $name }}
               env:
-                {{- include "statline.secretEnv" (dict "keys" $.Values.ingesta.secretKeys "secretName" $.Values.secrets.name) | nindent 16 }}
+                {{- include "statline.secretEnv" (dict "keys" $.Values.ingesta.secretKeys "optional" $.Values.ingesta.optionalSecretKeys "secretName" $.Values.secrets.name) | nindent 16 }}
               resources:
                 {{- toYaml $.Values.ingesta.resources | nindent 16 }}
               securityContext:

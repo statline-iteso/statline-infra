@@ -67,7 +67,7 @@ capabilities:
 
 {{/*
 Env entries that read the given keys from the statline Secret.
-Input: dict with keys (list of env var names) and secretName.
+Input: dict with keys (list of env var names), secretName and optional (list of keys that may be missing).
 */}}
 {{- define "statline.secretEnv" -}}
 {{- range .keys }}
@@ -76,6 +76,9 @@ Input: dict with keys (list of env var names) and secretName.
     secretKeyRef:
       name: {{ $.secretName }}
       key: {{ . }}
+      {{- if has . ($.optional | default list) }}
+      optional: true
+      {{- end }}
 {{- end }}
 {{- end -}}
 

@@ -2,6 +2,11 @@
 {{- $name := include "statline.fullname" (dict "component" $c "ctx" $) -}}
 {{- $tag := .Values.api.image.tag -}}
 {{- $labels := include "statline.labels" (dict "component" $c "ctx" $ "version" $tag) -}}
+{{- $lanzador := .Values.api.ingestaLanzador -}}
+{{- if not (has $lanzador (list "deshabilitado" "kubernetes")) -}}
+{{- fail (printf "api.ingestaLanzador must be deshabilitado or kubernetes, got %q" $lanzador) -}}
+{{- end -}}
+{{- $automount := or .Values.api.serviceAccount.automount (eq $lanzador "kubernetes") -}}
 {{- define "statline.api.config" -}}
 PORT: {{ .Values.api.port | toString | quote }}
 PREDICCIONES_URL: {{ printf "http://%s" (include "statline.fullname" (dict "component" "predicciones" "ctx" .)) | quote }}
@@ -9,6 +14,10 @@ REDIS_URL: {{ include "statline.redisUrl" . | quote }}
 LOG_LEVEL: {{ .Values.api.config.logLevel | quote }}
 JWT_ACCESS_TTL: {{ .Values.api.config.jwtAccessTtl | quote }}
 JWT_REFRESH_TTL: {{ .Values.api.config.jwtRefreshTtl | quote }}
+CACHE_TTL_S: {{ .Values.api.config.cacheTtlS | toString | quote }}
+RATE_LIMIT_PER_MIN: {{ .Values.api.config.rateLimitPerMin | toString | quote }}
+RATE_LIMIT_LOGIN_PER_MIN: {{ .Values.api.config.rateLimitLoginPerMin | toString | quote }}
+INGESTA_LANZADOR: {{ .Values.api.ingestaLanzador | quote }}
 {{- end -}}
 apiVersion: v1
 kind: ServiceAccount
@@ -16,7 +25,37 @@ metadata:
   name: {{ $name }}
   labels:
     {{- $labels | nindent 4 }}
-automountServiceAccountToken: {{ .Values.api.serviceAccount.automount }}
+automountServiceAccountToken: {{ $automount }}
+{{- if eq $lanzador "kubernetes" }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}-ingesta
+  labels:
+    {{- $labels | nindent 4 }}
+rules:
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["get"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}-ingesta
+  labels:
+    {{- $labels | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}-ingesta
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -54,7 +93,7 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ $name }}
-      automountServiceAccountToken: {{ .Values.api.serviceAccount.automount }}
+      automountServiceAccountToken: {{ $automount }}
       securityContext:
         {{- include "statline.podSecurity" (dict "uid" .Values.api.runAsUser) | nindent 8 }}
       # Migrations run with the same image before the new version serves traffic (D-12).
@@ -67,6 +106,9 @@ spec:
             - configMapRef:
                 name: {{ $name }}
           env:
+            # prisma may touch $HOME; the root filesystem is read-only.
+            - name: HOME
+              value: /tmp
             {{- include "statline.secretEnv" (dict "keys" .Values.api.secretKeys "secretName" .Values.secrets.name) | nindent 12 }}
           resources:
             {{- toYaml .Values.api.migrations.resources | nindent 12 }}

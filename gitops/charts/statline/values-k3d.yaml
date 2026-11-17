@@ -23,6 +23,7 @@ secrets:
       JWT_SECRET: dev-only-jwt-secret-do-not-use
       JWT_REFRESH_SECRET: dev-only-refresh-secret-do-not-use
       API_SPORTS_KEY: dev-only-not-a-real-key
+      BALLDONTLIE_API_KEY: dev-only-not-a-real-key
 
 devPostgres:
   enabled: true

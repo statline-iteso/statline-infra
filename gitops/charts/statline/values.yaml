@@ -41,6 +41,8 @@ secrets:
       JWT_SECRET: jwt-secret
       JWT_REFRESH_SECRET: jwt-refresh-secret
       API_SPORTS_KEY: api-sports-key
+      # Optional fallback provider. The Key Vault object must exist (Terraform seguridad module), or the CSI mount fails.
+      BALLDONTLIE_API_KEY: balldontlie-api-key
   plain:
     # Only read when secrets.mode is plain. Never put real values here.
     data: {}
@@ -90,6 +92,14 @@ api:
     # Duration format expected by the API (confirm with the backend owner).
     jwtAccessTtl: 15m
     jwtRefreshTtl: 7d
+    # In-process response cache TTL (seconds) and rate limits (requests per minute, per client IP).
+    cacheTtlS: 60
+    rateLimitPerMin: 300
+    rateLimitLoginPerMin: 10
+  # How the api triggers ingestions on demand (INGESTA_LANZADOR): deshabilitado | kubernetes.
+  # kubernetes mounts the ServiceAccount token and renders a namespaced Role/RoleBinding
+  # (get cronjobs, create jobs in group batch).
+  ingestaLanzador: deshabilitado
   # Keys of the statline Secret this component reads (env var names).
   secretKeys:
     - DATABASE_URL
@@ -149,9 +159,17 @@ ingesta:
     temporadaFutbol: "2026"
     # API-Sports free plan quota per day.
     apiSportsDailyQuota: "100"
+    # TheSportsDB public test key.
+    thesportsdbApiKey: "3"
+    # Fallback providers can duplicate games: keep "false" until deduplication is verified.
+    fallbackHabilitado: "false"
   secretKeys:
     - DATABASE_URL
     - API_SPORTS_KEY
+    - BALLDONTLIE_API_KEY
+  # Keys the pod tolerates missing (secretKeyRef optional).
+  optionalSecretKeys:
+    - BALLDONTLIE_API_KEY
   serviceAccount:
     automount: false
   # One CronJob per entry. Schedules are UTC.
