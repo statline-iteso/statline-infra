@@ -1,6 +1,9 @@
 # Environment: statline-staging, follows branch develop (Argo CD Application statline-staging).
 environment: staging
 
+networkPolicies:
+  enabled: true
+
 ingress:
   # Placeholder: replace with the real domain before deploying.
   host: "staging.<dominio>"

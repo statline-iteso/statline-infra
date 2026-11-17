@@ -22,3 +22,12 @@ resources:
     memory: 64Mi
   limits:
     memory: 192Mi
+
+# NetworkPolicy (D-21, D-16): port 6379 is open only to the api pods of statline namespaces.
+# A namespace qualifies when it carries the label key below (Terraform labels statline-staging and
+# statline-prod; k3d-up.sh labels them locally). Peer = namespace label AND pod label, in one rule.
+networkPolicy:
+  enabled: true
+  namespaceLabelKey: statline.io/ambiente
+  clientPodLabels:
+    app.kubernetes.io/name: statline-api

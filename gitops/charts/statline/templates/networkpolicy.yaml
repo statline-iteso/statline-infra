@@ -1,0 +1,323 @@
+{{- /*
+NetworkPolicies (networking.k8s.io/v1), gated by networkPolicies.enabled. Default-deny for every
+pod in the release namespace (ingress and egress), then one allow policy per flow. Each allow
+policy says who needs it. Matrix: docs/ARCHITECTURE.md section 5.1; decision: docs/DECISIONS.md D-21.
+
+Helpers below render peers and rules shared by several policies.
+*/ -}}
+
+{{- define "statline.netpol.ingressController" -}}
+- namespaceSelector:
+    matchLabels:
+      {{- toYaml .Values.networkPolicies.ingressController.namespaceLabels | nindent 6 }}
+  podSelector:
+    matchLabels:
+      {{- toYaml .Values.networkPolicies.ingressController.podLabels | nindent 6 }}
+{{- end -}}
+
+{{- define "statline.netpol.prometheus" -}}
+- namespaceSelector:
+    matchLabels:
+      {{- toYaml .Values.networkPolicies.prometheus.namespaceLabels | nindent 6 }}
+  podSelector:
+    matchLabels:
+      {{- toYaml .Values.networkPolicies.prometheus.podLabels | nindent 6 }}
+{{- end -}}
+
+{{/* Smoke-test pods (Argo CD PostSync Jobs, SL-57) carry this label. Same namespace only. */}}
+{{- define "statline.netpol.smoke" -}}
+{{- if .Values.networkPolicies.smokeTest.enabled }}
+- podSelector:
+    matchLabels:
+      statline.io/smoke: "true"
+{{- end }}
+{{- end -}}
+
+{{/* Any extra peers from networkPolicies.extraIngressFrom (raw NetworkPolicy peer objects). */}}
+{{- define "statline.netpol.extra" -}}
+{{- with .Values.networkPolicies.extraIngressFrom }}
+{{- toYaml . }}
+{{- end }}
+{{- end -}}
+
+{{- define "statline.netpol.pod" -}}
+- podSelector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" .component) | nindent 6 }}
+{{- end -}}
+
+{{/* Egress to PostgreSQL: the delegated subnet (postgresCidr) and/or the dev Postgres pod (k3d). */}}
+{{- define "statline.netpol.dbEgress" -}}
+{{- with .Values.networkPolicies.postgresCidr }}
+- to:
+    - ipBlock:
+        cidr: {{ . | quote }}
+  ports:
+    - protocol: TCP
+      port: 5432
+{{- end }}
+{{- if .Values.devPostgres.enabled }}
+- to:
+    - podSelector:
+        matchLabels:
+          {{- include "statline.selectorLabels" (dict "component" "postgres") | nindent 10 }}
+  ports:
+    - protocol: TCP
+      port: 5432
+{{- end }}
+{{- end -}}
+
+{{- define "statline.netpol.redisEgress" -}}
+- to:
+    - namespaceSelector:
+        matchLabels:
+          {{- toYaml .Values.networkPolicies.redis.namespaceLabels | nindent 10 }}
+      podSelector:
+        matchLabels:
+          {{- toYaml .Values.networkPolicies.redis.podLabels | nindent 10 }}
+  ports:
+    - protocol: TCP
+      port: {{ .Values.redis.port }}
+{{- end -}}
+
+{{- if .Values.networkPolicies.enabled }}
+{{- $rel := .Release.Name }}
+{{- $lanzador := .Values.api.ingestaLanzador }}
+{{- if and (eq $lanzador "kubernetes") (not .Values.networkPolicies.kubeApiCidr) }}
+{{- fail "networkPolicies.kubeApiCidr is required when api.ingestaLanzador is kubernetes (the AKS API server address, as /32)" }}
+{{- end }}
+---
+# Every pod in the namespace: no ingress and no egress unless an allow policy below says so.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-default-deny" $rel }}
+  labels:
+    {{- include "statline.labels" (dict "component" "netpol" "ctx" . "version" "") | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# DNS for all pods: CoreDNS in kube-system, UDP and TCP 53.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-allow-dns" $rel }}
+  labels:
+    {{- include "statline.labels" (dict "component" "netpol" "ctx" . "version" "") | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicies.dnsNamespaceLabels | nindent 14 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# web: the SPA is served to the ingress-nginx controller (plataforma). No egress beyond DNS.
+# Needed by: ingress-nginx (public traffic), smoke tests (SL-57), extraIngressFrom (hook).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-web-ingress" $rel }}
+  labels:
+    {{- include "statline.labels" (dict "component" "web" "ctx" . "version" .Values.web.image.tag) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" "web") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        {{- include "statline.netpol.ingressController" . | nindent 8 }}
+        {{- include "statline.netpol.smoke" . | nindent 8 }}
+        {{- include "statline.netpol.extra" . | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.web.port }}
+---
+# api: /api from ingress-nginx; /metrics from Prometheus (the port is the only filter available
+# in NetworkPolicy, so Prometheus can reach every api port). Smoke tests (SL-57) and extra peers.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-api-ingress" $rel }}
+  labels:
+    {{- include "statline.labels" (dict "component" "api" "ctx" . "version" .Values.api.image.tag) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" "api") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        {{- include "statline.netpol.ingressController" . | nindent 8 }}
+        {{- include "statline.netpol.prometheus" . | nindent 8 }}
+        {{- include "statline.netpol.smoke" . | nindent 8 }}
+        {{- include "statline.netpol.extra" . | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.api.port }}
+---
+# api egress: predicciones (forecasts), Redis in plataforma (cache), PostgreSQL (Prisma and
+# readiness), and the Kubernetes API only when ingestaLanzador is kubernetes (D-20).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-api-egress" $rel }}
+  labels:
+    {{- include "statline.labels" (dict "component" "api" "ctx" . "version" .Values.api.image.tag) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" "api") | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        {{- include "statline.netpol.pod" (dict "component" "predicciones") | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.predicciones.port }}
+    {{- include "statline.netpol.redisEgress" . | nindent 4 }}
+    {{- include "statline.netpol.dbEgress" . | nindent 4 }}
+    {{- if eq $lanzador "kubernetes" }}
+    # Kubernetes API for the on-demand ingestion Jobs (D-20). Address comes from values.
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicies.kubeApiCidr | quote }}
+      ports:
+        {{- range .Values.networkPolicies.kubeApiPorts }}
+        - protocol: TCP
+          port: {{ . }}
+        {{- end }}
+    {{- end }}
+---
+{{- if .Values.networkPolicies.smokeTest.enabled }}
+# Smoke-test pods (SL-57) reach web and api. Their DNS comes from allow-dns.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-smoke-egress" $rel }}
+  labels:
+    {{- include "statline.labels" (dict "component" "netpol" "ctx" . "version" "") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      statline.io/smoke: "true"
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "statline.selectorLabels" (dict "component" "web") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.web.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "statline.selectorLabels" (dict "component" "api") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.api.port }}
+---
+{{- end }}
+# predicciones: forecasts from api and metrics from Prometheus. Egress only to PostgreSQL.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-predicciones-ingress" $rel }}
+  labels:
+    {{- include "statline.labels" (dict "component" "predicciones" "ctx" . "version" .Values.predicciones.image.tag) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" "predicciones") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        {{- include "statline.netpol.pod" (dict "component" "api") | nindent 8 }}
+        {{- include "statline.netpol.prometheus" . | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.predicciones.port }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-predicciones-egress" $rel }}
+  labels:
+    {{- include "statline.labels" (dict "component" "predicciones" "ctx" . "version" .Values.predicciones.image.tag) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" "predicciones") | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    {{- include "statline.netpol.dbEgress" . | nindent 4 }}
+---
+# ingesta CronJobs: PostgreSQL, and HTTPS to the sports APIs on the internet. Private ranges are
+# excluded so the job cannot reach the VNet, other pods or node addresses. No ingress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-ingesta-egress" $rel }}
+  labels:
+    {{- include "statline.labels" (dict "component" "ingesta" "ctx" . "version" .Values.ingesta.image.tag) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" "ingesta") | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    {{- include "statline.netpol.dbEgress" . | nindent 4 }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+{{- if .Values.devPostgres.enabled }}
+---
+# k3d only: the dev Postgres accepts connections from the workloads that use it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-postgres-ingress" $rel }}
+  labels:
+    {{- include "statline.labels" (dict "component" "postgres" "ctx" . "version" "") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" "postgres") | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        {{- include "statline.netpol.pod" (dict "component" "api") | nindent 8 }}
+        {{- include "statline.netpol.pod" (dict "component" "predicciones") | nindent 8 }}
+        {{- include "statline.netpol.pod" (dict "component" "ingesta") | nindent 8 }}
+      ports:
+        - protocol: TCP
+          port: 5432
+{{- end }}
+{{- end }}

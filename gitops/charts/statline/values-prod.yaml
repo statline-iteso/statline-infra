@@ -1,6 +1,9 @@
 # Environment: statline-prod, follows branch main (Argo CD Application statline-prod).
 environment: prod
 
+networkPolicies:
+  enabled: true
+
 ingress:
   # Placeholder: replace with the real domain before deploying.
   host: "<dominio>"
