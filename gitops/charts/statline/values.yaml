@@ -1,0 +1,187 @@
+# Defaults for the statline chart. Environment files (values-staging.yaml, values-prod.yaml,
+# values-k3d.yaml) override only what differs. Image tags have no default: every environment
+# file sets them, and the chart fails with a clear message when one is missing.
+#
+# Image tags are quoted strings (a tag like 1234567 must not become a number). cd.yml is the
+# only writer of the *.image.tag paths in staging and prod values.
+
+# Shown as the statline.io/environment label.
+environment: dev
+
+nameOverride: ""
+
+global:
+  # Registry prefix for every image: <imageRegistry>/<image.repository>:<tag>.
+  # Set to "" to use repository:tag as written (k3d uses images imported with k3d image import).
+  imageRegistry: docker.io
+
+# Shared Redis (chart gitops/charts/redis, namespace plataforma).
+redis:
+  host: redis.plataforma.svc.cluster.local
+  port: 6379
+  # Logical DB index, so staging and prod never share keys: prod 0, staging 1.
+  dbIndex: 0
+
+# Secrets. Both modes produce ONE Kubernetes Secret named secrets.name whose keys are the env var names.
+secrets:
+  # csi:   SecretProviderClass syncs Key Vault secrets into the Secret (production and staging).
+  # plain: the chart renders the Secret from secrets.plain.data (k3d only; fake values).
+  mode: csi
+  name: statline-secrets
+  csi:
+    secretProviderClassName: statline-kv
+    # Key Vault name (kv-statline-<suffix>), tenant and the CSI add-on identity client id.
+    # Outputs of terraform/principal (key_vault_csi_identity_client_id).
+    keyvaultName: ""
+    tenantId: ""
+    userAssignedIdentityID: ""
+    # Env var (= Secret key) -> Key Vault secret name. Environment files set the real names.
+    objects:
+      DATABASE_URL: database-url
+      JWT_SECRET: jwt-secret
+      JWT_REFRESH_SECRET: jwt-refresh-secret
+      API_SPORTS_KEY: api-sports-key
+  plain:
+    # Only read when secrets.mode is plain. Never put real values here.
+    data: {}
+
+# Public entry point. Routes /api to the api Service and / to web.
+ingress:
+  enabled: true
+  className: nginx
+  # Required. Set in each environment file.
+  host: ""
+  tls:
+    # cert-manager issues the certificate for the host via the ClusterIssuer below.
+    enabled: false
+    secretName: statline-tls
+    clusterIssuer: ""
+
+# Static SPA served by nginx-unprivileged.
+web:
+  replicas: 2
+  port: 8080
+  runAsUser: 101
+  image:
+    repository: statline/web
+    tag: ""
+    pullPolicy: IfNotPresent
+  serviceAccount:
+    # Workloads do not need the API server; flip only if a component starts to need it.
+    automount: false
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
+# Node API. Its initContainer runs prisma migrate deploy with the same image (D-12).
+api:
+  replicas: 2
+  port: 3000
+  runAsUser: 1000
+  image:
+    repository: statline/api
+    tag: ""
+    pullPolicy: IfNotPresent
+  config:
+    logLevel: info
+    # Duration format expected by the API (confirm with the backend owner).
+    jwtAccessTtl: 15m
+    jwtRefreshTtl: 7d
+  # Keys of the statline Secret this component reads (env var names).
+  secretKeys:
+    - DATABASE_URL
+    - JWT_SECRET
+    - JWT_REFRESH_SECRET
+  serviceAccount:
+    # Kept as a switch: the API may need the token later (e.g. for workload identity).
+    automount: false
+  migrations:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 384Mi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      memory: 384Mi
+
+# Forecast service (FastAPI + scikit-learn). Model artifacts are cached in /tmp.
+predicciones:
+  replicas: 1
+  port: 8000
+  runAsUser: 10001
+  image:
+    repository: statline/predicciones
+    tag: ""
+    pullPolicy: IfNotPresent
+  config:
+    artefactosDir: /tmp/artefactos
+    logLevel: info
+  secretKeys:
+    - DATABASE_URL
+  serviceAccount:
+    automount: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      memory: 768Mi
+
+# Ingesta runs only as CronJobs (no Deployment, no port).
+ingesta:
+  runAsUser: 10001
+  image:
+    repository: statline/ingesta
+    tag: ""
+    pullPolicy: IfNotPresent
+  config:
+    # Seasons must match the seeded liga.temporada values (backend ARCHITECTURE section 8).
+    temporadaBasquetbol: "2025-2026"
+    temporadaAmericano: "2026"
+    temporadaFutbol: "2026"
+    # API-Sports free plan quota per day.
+    apiSportsDailyQuota: "100"
+  secretKeys:
+    - DATABASE_URL
+    - API_SPORTS_KEY
+  serviceAccount:
+    automount: false
+  # One CronJob per entry. Schedules are UTC.
+  jobs:
+    - name: basquetbol
+      schedule: "0 8 * * *"
+      args: ["run", "basquetbol"]
+    - name: americano
+      schedule: "0 8 * * 2"
+      args: ["run", "americano"]
+    - name: futbol
+      schedule: "0 8 * * 1,5"
+      args: ["run", "futbol"]
+  cronjob:
+    concurrencyPolicy: Forbid
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+    backoffLimit: 1
+    activeDeadlineSeconds: 3600
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# DEV ONLY (k3d). Ephemeral PostgreSQL in the release namespace. Off everywhere else.
+devPostgres:
+  enabled: false
+  image: postgres:16-alpine
+  user: statline
+  password: ""
+  database: statline

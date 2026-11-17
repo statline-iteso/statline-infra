@@ -1,0 +1,84 @@
+{{- $c := "web" -}}
+{{- $name := include "statline.fullname" (dict "component" $c "ctx" $) -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "statline.labels" (dict "component" $c "ctx" $ "version" $.Values.web.image.tag) | nindent 4 }}
+automountServiceAccountToken: {{ .Values.web.serviceAccount.automount }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "statline.labels" (dict "component" $c "ctx" $ "version" $.Values.web.image.tag) | nindent 4 }}
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" $c) | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "statline.labels" (dict "component" $c "ctx" $ "version" $.Values.web.image.tag) | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: {{ .Values.web.serviceAccount.automount }}
+      securityContext:
+        {{- include "statline.podSecurity" (dict "uid" .Values.web.runAsUser) | nindent 8 }}
+      containers:
+        - name: web
+          image: {{ include "statline.image" (dict "component" $c "image" .Values.web.image "ctx" $) }}
+          imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.web.port }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext:
+            {{- include "statline.containerSecurity" . | nindent 12 }}
+          # nginx-unprivileged writes its pid and temp files under /tmp and /var/cache/nginx.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "statline.labels" (dict "component" $c "ctx" $ "version" $.Values.web.image.tag) | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "statline.selectorLabels" (dict "component" $c) | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

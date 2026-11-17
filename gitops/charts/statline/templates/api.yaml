@@ -1,0 +1,126 @@
+{{- $c := "api" -}}
+{{- $name := include "statline.fullname" (dict "component" $c "ctx" $) -}}
+{{- $tag := .Values.api.image.tag -}}
+{{- $labels := include "statline.labels" (dict "component" $c "ctx" $ "version" $tag) -}}
+{{- define "statline.api.config" -}}
+PORT: {{ .Values.api.port | toString | quote }}
+PREDICCIONES_URL: {{ printf "http://%s" (include "statline.fullname" (dict "component" "predicciones" "ctx" .)) | quote }}
+REDIS_URL: {{ include "statline.redisUrl" . | quote }}
+LOG_LEVEL: {{ .Values.api.config.logLevel | quote }}
+JWT_ACCESS_TTL: {{ .Values.api.config.jwtAccessTtl | quote }}
+JWT_REFRESH_TTL: {{ .Values.api.config.jwtRefreshTtl | quote }}
+{{- end -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+automountServiceAccountToken: {{ .Values.api.serviceAccount.automount }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+data:
+  {{- include "statline.api.config" . | nindent 2 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" $c) | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- $labels | nindent 8 }}
+      annotations:
+        checksum/config: {{ include "statline.api.config" . | sha256sum | quote }}
+        {{- if eq .Values.secrets.mode "plain" }}
+        checksum/secret: {{ include "statline.secretData" . | sha256sum | quote }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: {{ .Values.api.serviceAccount.automount }}
+      securityContext:
+        {{- include "statline.podSecurity" (dict "uid" .Values.api.runAsUser) | nindent 8 }}
+      # Migrations run with the same image before the new version serves traffic (D-12).
+      initContainers:
+        - name: migrate
+          image: {{ include "statline.image" (dict "component" $c "image" .Values.api.image "ctx" $) }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+          envFrom:
+            - configMapRef:
+                name: {{ $name }}
+          env:
+            {{- include "statline.secretEnv" (dict "keys" .Values.api.secretKeys "secretName" .Values.secrets.name) | nindent 12 }}
+          resources:
+            {{- toYaml .Values.api.migrations.resources | nindent 12 }}
+          securityContext:
+            {{- include "statline.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            {{- include "statline.tmpVolumeMount" . | nindent 12 }}
+            {{- include "statline.secretVolumeMount" . | nindent 12 }}
+      containers:
+        - name: api
+          image: {{ include "statline.image" (dict "component" $c "image" .Values.api.image "ctx" $) }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ $name }}
+          env:
+            {{- include "statline.secretEnv" (dict "keys" .Values.api.secretKeys "secretName" .Values.secrets.name) | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            {{- include "statline.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            {{- include "statline.tmpVolumeMount" . | nindent 12 }}
+            {{- include "statline.secretVolumeMount" . | nindent 12 }}
+      volumes:
+        {{- include "statline.tmpVolume" . | nindent 8 }}
+        {{- include "statline.secretVolume" . | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "statline.selectorLabels" (dict "component" $c) | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

@@ -1,0 +1,55 @@
+# Local cluster (make k3d-up + make k3d-deploy). Install into statline-staging.
+# Everything here is DEV ONLY: fake secrets, an ephemeral PostgreSQL, no TLS.
+environment: local
+
+global:
+  # Images are imported with `k3d image import`, not pulled.
+  imageRegistry: ""
+
+ingress:
+  host: statline.localhost
+  tls:
+    enabled: false
+
+redis:
+  dbIndex: 1
+
+secrets:
+  mode: plain
+  plain:
+    data:
+      # DATABASE_URL is overwritten by the dev Postgres URL (devPostgres below).
+      DATABASE_URL: ""
+      JWT_SECRET: dev-only-jwt-secret-do-not-use
+      JWT_REFRESH_SECRET: dev-only-refresh-secret-do-not-use
+      API_SPORTS_KEY: dev-only-not-a-real-key
+
+devPostgres:
+  enabled: true
+  user: statline
+  password: statline-dev-only
+  database: statline
+
+# Local images built with tag `local` (see gitops/README.md).
+web:
+  replicas: 1
+  image:
+    repository: statline/web
+    tag: local
+    pullPolicy: Never
+api:
+  replicas: 1
+  image:
+    repository: statline/api
+    tag: local
+    pullPolicy: Never
+predicciones:
+  image:
+    repository: statline/predicciones
+    tag: local
+    pullPolicy: Never
+ingesta:
+  image:
+    repository: statline/ingesta
+    tag: local
+    pullPolicy: Never
