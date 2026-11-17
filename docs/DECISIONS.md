@@ -23,11 +23,14 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-13 | 2026-11-16 | k3d (k3s 1.30) for local clusters, Traefik disabled in favor of ingress-nginx | Decided |
 | D-14 | 2026-11-16 | Docs in English; course-delivery sections and domain names in Spanish | Decided |
 | D-15 | 2026-11-16 | `develop` is the default branch; `main` only receives `release/*` and `hotfix/*` | Decided |
+| D-16 | 2026-11-16 | One database per environment (`statline_staging`, `statline_prod`) on the same PostgreSQL server; apps use the admin login | Decided |
+| D-17 | 2026-11-16 | Secrets per environment (`database-url-<env>`, `jwt-*-<env>`); one shared `api-sports-key`, placeholder set out of band | Decided |
+| D-18 | 2026-11-16 | Key Vault with Azure RBAC, Standard SKU, 7-day soft delete, purge protection off, public endpoint with default Allow | Decided |
 
 ## 2. Details
 
-### D-03 · One cluster, two namespaces
-Two clusters would double the node cost, which the student credit can't cover. Namespaces plus NetworkPolicies and separate databases give enough isolation for a course project. **Trade-off:** a bad platform-chart upgrade affects both environments.
+### D-03 · One cluster, two namespaces, two databases
+Two clusters would double the node cost, which the student credit can't cover. Namespaces plus NetworkPolicies and separate databases (`statline_staging`, `statline_prod`, see D-16) on one PostgreSQL server give enough isolation for a course project. **Trade-off:** a bad platform-chart upgrade or a PostgreSQL outage affects both environments.
 
 ### D-04 · State with Entra ID
 `use_azuread_auth = true` and `shared_access_key_enabled = false` on the storage account: nobody handles storage keys, and access is the *Storage Blob Data Contributor* role. Locking uses the blob lease, which the azurerm backend does by default.
@@ -41,6 +44,20 @@ Standard_B2s (2 vCPU, 4 GiB) is the smallest size that fits the platform charts 
 ### D-10 · GitOps folder instead of a fourth repo
 The proposal says `cd.yml` updates "el repositorio GitOps". Keeping `gitops/` in this repo means infra changes and their manifests are reviewed together, and the app repos only need permission to dispatch an event here. **If** the team prefers a separate `statline-gitops` repo, only the Argo CD `repoURL` and the dispatch target change.
 
+### D-16 · One database per environment, admin login for apps
+`modules/datos` creates `statline_staging` and `statline_prod` on the same server (`for_each` over `bases_de_datos`, both `prevent_destroy`). Output `database_urls` is a sensitive map keyed by env, and each URL uses `sslmode=require`. The former single `statline` database was replaced before anything was applied (Azure was never provisioned), so there is no state to migrate.
+
+The apps connect with the server administrator login. **Limitation:** the same superuser credentials reach both databases, so an app bug in staging could read prod. Per-app roles with least privilege would need the `postgresql` provider (roles and grants managed by Terraform) and are left as future work. Prisma needs DDL rights for its migrations, which is another reason to keep the admin login for now.
+
+### D-17 · Secrets per environment
+`database-url-<env>`, `jwt-secret-<env>` and `jwt-refresh-secret-<env>` are generated per environment, so a staging token can never validate in prod. `random_password` (64 chars, alphanumeric so they are safe in URLs and env files) generates the JWT values; they are kept in the Terraform state, which is in the Entra-authenticated storage account (D-04). `api-sports-key` is one secret because the API-Sports quota belongs to the account, not to an environment. Its placeholder value is set once in the portal or with `az keyvault secret set`, and `ignore_changes = [value]` stops Terraform from overwriting it.
+
+### D-18 · Key Vault settings
+- **RBAC, not access policies.** The deployer gets *Key Vault Secrets Officer* so Terraform can write the secrets; the CSI add-on identity gets *Key Vault Secrets User* (read only).
+- **Purge protection off, soft delete 7 days (the minimum).** Students run `make destroy` often and re-create the stack. With purge protection on, the vault name stays reserved for the retention period and the vault cannot be purged. The name carries a random suffix, so a re-created stack never collides with a soft-deleted vault. **Trade-off:** a deleted vault cannot be recovered after 7 days, so an accidental destroy of the vault is not undoable later. Acceptable for a course project, where the secrets are regenerated or re-set anyway.
+- **Public endpoint, default Allow.** The CSI driver in AKS reads the vault over its public endpoint. Private endpoints and a private DNS zone would add cost and wiring that the Azure for Students budget does not cover. Access is still limited by RBAC and by the lack of any access keys.
+- **Known first-apply behaviour:** a new role assignment can take a few minutes to propagate, so the first apply may fail with 403 on the secret writes. Running `make apply` again resolves it.
+
 ### D-12 · Migrations in an initContainer
 `prisma migrate deploy` is idempotent and takes an advisory lock, so two replicas starting together don't race. Rolling back an image does **not** roll back the schema; migrations must be backward compatible (expand, then contract).
 
@@ -50,6 +67,8 @@ The proposal says `cd.yml` updates "el repositorio GitOps". Keeping `gitops/` in
 - `make destroy` deletes the database. Until backups to a storage account exist, dump before destroying.
 - The `plan` job in CI is skipped until the Azure OIDC app registration and the repo secrets exist (docs/pendientes.md).
 - No WAF, no private AKS API server (cost and complexity).
+- Apps use the PostgreSQL admin login for both environments (D-16); per-app roles need the `postgresql` provider.
+- Key Vault has a public endpoint (D-18); private endpoints are out of budget scope.
 
 ## 4. Future work
 
