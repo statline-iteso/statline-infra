@@ -73,4 +73,4 @@ The synced Secret exists only while a pod mounts the CSI volume. Every pod that 
 
 ## Not here yet
 
-HPA, NetworkPolicies, PodDisruptionBudgets, ServiceMonitors and smoke-test hooks are separate tasks. Add them as new templates under `charts/statline/templates/` gated by their own values section.
+HPA, NetworkPolicies, PodDisruptionBudgets and ServiceMonitors are separate tasks. Post-deploy smoke tests are in `templates/smoke-test.yaml` (see `docs/RUNBOOK.md`). A failed smoke test does not roll back; `make smoke ENV=staging` runs the same checks by hand against k3d or AKS. Add them as new templates under `charts/statline/templates/` gated by their own values section.

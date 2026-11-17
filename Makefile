@@ -6,7 +6,7 @@ TF := terraform
 PRINCIPAL := terraform/principal
 BOOTSTRAP := terraform/bootstrap
 
-.PHONY: help bootstrap backend-config init plan apply destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy diagram
+.PHONY: help bootstrap backend-config init plan apply destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
 
 help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-16s %s\n",$$1,$$2}'
@@ -80,6 +80,18 @@ k3d-deploy: ## Install redis (plataforma) and the chart with values-k3d (statlin
 	@ctx=$$(kubectl config current-context); case "$$ctx" in k3d-*) ;; *) echo "Refusing: current context is '$$ctx', not k3d-*"; exit 1;; esac
 	helm upgrade --install redis gitops/charts/redis --namespace plataforma --wait
 	helm upgrade --install statline gitops/charts/statline --namespace statline-staging -f gitops/charts/statline/values-k3d.yaml --wait
+
+# Smoke checks from your machine, in a throwaway pod (same script as the smoke-test Job). Not run by CI.
+# Refuses unless the current context is a k3d-* or aks-statline* cluster. The release defaults to statline-<ENV>;
+# k3d-deploy installs it as "statline", so: make smoke ENV=staging RELEASE=statline
+RELEASE ?= statline-$(ENV)
+SMOKE_IMAGE := curlimages/curl:8.11.1
+SMOKE_OVERRIDES = {"spec":{"automountServiceAccountToken":false,"securityContext":{"runAsNonRoot":true,"runAsUser":100,"runAsGroup":101,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"statline-smoke","securityContext":{"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}},"env":[{"name":"SMOKE_WEB","value":"http://$(RELEASE)-web"},{"name":"SMOKE_API","value":"http://$(RELEASE)-api"},{"name":"SMOKE_PREDICCIONES","value":"http://$(RELEASE)-predicciones"}]}]}}
+
+smoke: ## In-cluster smoke checks: make smoke ENV=staging|prod [RELEASE=...] (k3d-* or aks-statline* contexts only)
+	@case "$(ENV)" in staging|prod) ;; *) echo "Set ENV=staging or ENV=prod"; exit 1;; esac
+	@ctx=$$(kubectl config current-context); case "$$ctx" in k3d-*|aks-statline*) ;; *) echo "Refusing: current context is '$$ctx', not k3d-* or aks-statline*"; exit 1;; esac
+	kubectl run statline-smoke --namespace statline-$(ENV) --rm -i --restart=Never --image=$(SMOKE_IMAGE) --labels=statline.io/smoke=true --overrides='$(SMOKE_OVERRIDES)' -- sh -s < gitops/charts/statline/files/smoke-test.sh
 
 diagram: ## Render docs/solucion.mmd → docs/solucion.png
 	npx -y @mermaid-js/mermaid-cli@11.4.0 -i docs/solucion.mmd -o docs/solucion.png -b white -w 1600

@@ -25,6 +25,9 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-18 | 2026-11-16 | Dev PostgreSQL inside the cluster, only with `values-k3d.yaml` | Decided |
 | D-19 | 2026-11-16 | Chart at `gitops/charts/statline` (not `gitops/chart`); app label scheme with the component in `app.kubernetes.io/name` | Decided |
 | D-20 | 2026-11-16 | Backend contract knobs as chart values; on-demand ingestion RBAC only when `api.ingestaLanzador: kubernetes`; fallback ingestion off in staging and prod | Decided |
+| D-21 | 2026-11-16 | Post-deploy smoke tests: a Job as Argo CD PostSync hook, also a Helm post-install/post-upgrade hook (k3d) | Decided |
+| D-22 | 2026-11-16 | No automatic rollback: rollback is a `git revert` of the image-tag bump; `argocd app rollback` only as a temporary stopgap | Decided |
+| D-23 | 2026-11-16 | Argo CD sync retry limit 2 (was 5) in staging and prod, so a failing smoke hook is not re-run six times | Decided |
 | D-13 | 2026-11-16 | k3d (k3s 1.30) for local clusters, Traefik disabled in favor of ingress-nginx | Decided |
 | D-14 | 2026-11-16 | Docs in English; course-delivery sections and domain names in Spanish | Decided |
 | D-15 | 2026-11-16 | `develop` is the default branch; `main` only receives `release/*` and `hotfix/*` | Decided |
@@ -63,6 +66,15 @@ The chart lives at `gitops/charts/statline` so the Redis chart can sit beside it
 
 ### D-12 · Migrations in an initContainer
 `prisma migrate deploy` is idempotent and takes an advisory lock, so two replicas starting together don't race. Rolling back an image does **not** roll back the schema; migrations must be backward compatible (expand, then contract).
+
+### D-21 · Smoke tests as a hook Job
+`templates/smoke-test.yaml` renders a Job (`<release>-smoke`) that runs `files/smoke-test.sh` in the namespace with `curlimages/curl:8.11.1`. It checks `/healthz` of web, and `/healthz` and `/readyz` of api and predicciones, retrying each check 10 times 6 s apart, and gives up after `activeDeadlineSeconds: 180` (`backoffLimit: 0`). Argo CD runs it as a `PostSync` hook with `BeforeHookCreation,HookSucceeded`. The same annotations are also set in the Helm form (`post-install,post-upgrade`, `before-hook-creation,hook-succeeded`), so `make k3d-deploy` runs it too. The pod carries `statline.io/smoke: "true"`, which the NetworkPolicies must allow to reach web, api and predicciones. Toggle: `smokeTests.enabled` (true everywhere). **Trade-off:** a failing hook does not undo the rollout (D-22). The Job's `activeDeadlineSeconds` caps the whole run; 5 checks at 10 attempts can take up to ~300 s, so the deadline cuts a worst case short.
+
+### D-22 · Rollback by revert, not by Argo
+Argo CD's automated sync does not roll back when a hook fails, and `argocd app rollback` refuses to run while automated sync is on. The GitOps-native fix is the source of truth: revert the image-tag bump commit (`cd.yml` wrote it), and Argo syncs the old tags. This keeps Git and the cluster in agreement, which a manual rollback does not. `argocd app rollback` (with auto-sync off) is the stopgap for minutes when a PR cannot merge fast enough. Step-by-step commands are in `docs/RUNBOOK.md`. **Limit:** the database is not rolled back. Migrations must stay backward compatible (D-12).
+
+### D-23 · Sync retry limit 2
+The Applications had `retry.limit: 5` with backoff up to 5 min. A failing PostSync hook makes each retry re-run the whole sync and the smoke Job (up to 180 s each), so a broken release would be retested six times while the bad pods keep serving. Staging and prod now use `limit: 2`. The platform Applications (redis, plataforma-config) keep 5.
 
 ## 3. Known limitations
 

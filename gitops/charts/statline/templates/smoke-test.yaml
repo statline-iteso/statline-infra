@@ -1,0 +1,87 @@
+{{- if .Values.smokeTests.enabled }}
+{{- $c := "smoke" -}}
+{{- $name := include "statline.fullname" (dict "component" $c "ctx" $) -}}
+{{- $labels := include "statline.labels" (dict "component" $c "ctx" $ "version" $.Values.smokeTests.image.tag) -}}
+# Post-deploy smoke tests. Argo CD runs this Job as a PostSync hook; Helm runs it as a post-install
+# and post-upgrade hook (make k3d-deploy). A failing check fails the sync or the release. Nothing
+# is rolled back automatically: see docs/RUNBOOK.md.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+data:
+  smoke-test.sh: |
+{{ .Files.Get "files/smoke-test.sh" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.smokeTests.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- $labels | nindent 8 }}
+        # Allowed by the NetworkPolicies to reach web, api and predicciones.
+        statline.io/smoke: "true"
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ .Values.smokeTests.runAsUser }}
+        runAsGroup: {{ .Values.smokeTests.runAsGroup }}
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: smoke
+          image: {{ include "statline.image" (dict "component" "smokeTests" "image" .Values.smokeTests.image "ctx" $) }}
+          imagePullPolicy: {{ .Values.smokeTests.image.pullPolicy }}
+          command: ["/bin/sh", "/opt/smoke/smoke-test.sh"]
+          env:
+            - name: SMOKE_WEB
+              value: {{ printf "http://%s" (include "statline.fullname" (dict "component" "web" "ctx" $)) | quote }}
+            - name: SMOKE_API
+              value: {{ printf "http://%s" (include "statline.fullname" (dict "component" "api" "ctx" $)) | quote }}
+            - name: SMOKE_PREDICCIONES
+              value: {{ printf "http://%s" (include "statline.fullname" (dict "component" "predicciones" "ctx" $)) | quote }}
+            - name: SMOKE_ATTEMPTS
+              value: {{ .Values.smokeTests.attempts | toString | quote }}
+            - name: SMOKE_INTERVAL
+              value: {{ .Values.smokeTests.intervalSeconds | toString | quote }}
+          resources:
+            {{- toYaml .Values.smokeTests.resources | nindent 12 }}
+          securityContext:
+            {{- include "statline.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            {{- include "statline.tmpVolumeMount" . | nindent 12 }}
+            - name: script
+              mountPath: /opt/smoke
+              readOnly: true
+      volumes:
+        {{- include "statline.tmpVolume" . | nindent 8 }}
+        - name: script
+          configMap:
+            name: {{ $name }}
+            defaultMode: 0444
+{{- end }}

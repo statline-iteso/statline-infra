@@ -59,7 +59,7 @@ With a delegated subnet the server has no public endpoint, so the proposal's "fi
 
 | Path | What |
 |---|---|
-| `gitops/charts/statline/` | the environment chart (`Chart.yaml` v2, 0.1.0). Templates: `_helpers.tpl`, `web.yaml`, `api.yaml`, `predicciones.yaml`, `ingesta.yaml` (ServiceAccount, ConfigMap, 3 CronJobs), `ingress.yaml`, `secrets.yaml`, `dev-postgres.yaml` (k3d only) |
+| `gitops/charts/statline/` | the environment chart (`Chart.yaml` v2, 0.1.0). Templates: `_helpers.tpl`, `web.yaml`, `api.yaml`, `predicciones.yaml`, `ingesta.yaml` (ServiceAccount, ConfigMap, 3 CronJobs), `ingress.yaml`, `secrets.yaml`, `dev-postgres.yaml` (k3d only), `smoke-test.yaml` (post-deploy smoke Job, D-21; script in `files/smoke-test.sh`) |
 | `gitops/charts/statline/values.yaml` | documented defaults. Not renderable alone: image tags are required |
 | `gitops/charts/statline/values-{staging,prod,k3d}.yaml` | one file per environment. Argo CD renders staging and prod; `make k3d-deploy` renders k3d |
 | `gitops/charts/redis/` | Redis StatefulSet, Service and ServiceAccount for `plataforma` (D-16) |
@@ -83,6 +83,7 @@ Naming and labels: objects are named `<release>-<component>` (release `statline-
 | ServiceAccount | 1 per workload | `automountServiceAccountToken: false` (a values switch per component) |
 | ConfigMap | 1 for api, predicciones, ingesta | non-secret settings. Web has no env, so it has no ConfigMap. Changes roll the pods through a `checksum/config` annotation |
 | SecretProviderClass or Secret | 1 per env | see 4.3 |
+| Job | 1 per env | `<release>-smoke`: post-deploy smoke test, PostSync and Helm hook (D-21). Pod label `statline.io/smoke: "true"` lets it reach web, api and predicciones (NetworkPolicies) |
 | HPA | 2 per env | api 2–6 at 70 % CPU; predicciones 1–4 at 75 % CPU. **Later task** |
 
 ### 4.3 Secret mapping
@@ -133,7 +134,7 @@ CronJob args: `["run", "basquetbol"]`, `["run", "americano"]`, `["run", "futbol"
 2. **Quality gate:** `develop` and `main` are protected: CI must pass and one reviewer must approve.
 3. **Artifacts (`cd.yml`, planned SL-53):** on merge, push `statline/<image>:<short-sha>` (and `vX.Y.Z` on release branches) to Docker Hub, then commit the new tag to `gitops/values-<env>.yaml` in this repo.
 4. **GitOps sync (planned SL-53):** Argo CD watches `gitops/` and syncs `statline-staging` (from `develop`) and `statline-prod` (from `main`).
-5. **Verify and roll back (planned SL-57):** a PostSync hook Job curls `/healthz` and `/readyz`; on failure Argo CD rolls back to the last healthy revision.
+5. **Verify (SL-57):** a PostSync hook Job (`<release>-smoke`, D-21) checks `/healthz` of web and `/healthz` + `/readyz` of api and predicciones, from inside the namespace. A failed check fails the sync. **Argo CD does not roll back**: the new pods keep running. Rollback is a `git revert` of the image-tag bump (D-22). See `docs/RUNBOOK.md`.
 
 ## 7. Branch strategy
 
