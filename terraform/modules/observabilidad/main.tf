@@ -13,13 +13,6 @@ resource "azurerm_log_analytics_workspace" "main" {
   tags                = var.tags
 }
 
-# Categories and metrics each resource supports. Used to check explicit category lists at plan
-# time and to pick the allLogs group when a resource has no explicit list.
-data "azurerm_monitor_diagnostic_categories" "this" {
-  for_each    = var.recursos_diagnostico
-  resource_id = each.value.resource_id
-}
-
 resource "azurerm_monitor_diagnostic_setting" "this" {
   for_each = var.recursos_diagnostico
 
@@ -37,6 +30,7 @@ resource "azurerm_monitor_diagnostic_setting" "this" {
   }
 
   # Explicit list: only these categories (cheap defaults in principal, see DECISIONS D-16).
+  # Azure rejects unsupported names at apply time.
   dynamic "enabled_log" {
     for_each = each.value.log_categories == null ? toset([]) : toset(each.value.log_categories)
     content {
@@ -44,21 +38,12 @@ resource "azurerm_monitor_diagnostic_setting" "this" {
     }
   }
 
-  dynamic "metric" {
-    for_each = each.value.metrics && contains(data.azurerm_monitor_diagnostic_categories.this[each.key].metrics, "AllMetrics") ? toset(["AllMetrics"]) : toset([])
+  # AllMetrics is supported by AKS and PostgreSQL. Not read from a data source: the resource ids
+  # are unknown on the first plan, so a lookup would defer and could not validate anything then.
+  dynamic "enabled_metric" {
+    for_each = each.value.metrics ? toset(["AllMetrics"]) : toset([])
     content {
-      category = metric.value
-      enabled  = true
-    }
-  }
-
-  lifecycle {
-    precondition {
-      condition = alltrue([
-        for c in coalesce(each.value.log_categories, []) :
-        contains(data.azurerm_monitor_diagnostic_categories.this[each.key].log_category_types, c)
-      ])
-      error_message = "Some log categories in recursos_diagnostico[\"${each.key}\"] are not supported by the resource. Check the names with az monitor diagnostic-settings categories list."
+      category = enabled_metric.value
     }
   }
 }

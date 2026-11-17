@@ -39,7 +39,7 @@ variable "recursos_diagnostico" {
   type = map(object({
     resource_id    = string
     log_categories = optional(list(string)) # null = allLogs group; list = only these categories
-    metrics        = optional(bool, true)   # AllMetrics when the resource supports it
+    metrics        = optional(bool, true)   # AllMetrics (the resource must support it)
   }))
   description = "Resources to send to Log Analytics, keyed by a short name (diagnostic setting diag-<key>). Pass resource ids from other modules."
   default     = {}
