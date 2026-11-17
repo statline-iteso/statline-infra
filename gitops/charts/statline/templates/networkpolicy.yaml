@@ -244,7 +244,7 @@ spec:
 {{- end }}
 ---
 {{- if .Values.networkPolicies.smokeTest.enabled }}
-# Smoke-test pods (SL-57) reach web and api. Their DNS comes from allow-dns.
+# Smoke-test pods (SL-57) reach web, api and predicciones. Their DNS comes from allow-dns.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -272,6 +272,13 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.api.port }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "statline.selectorLabels" (dict "component" "predicciones") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.predicciones.port }}
 ---
 {{- end }}
 # predicciones: forecasts from api and metrics from Prometheus. Egress only to PostgreSQL.
@@ -291,6 +298,7 @@ spec:
     - from:
         {{- include "statline.netpol.pod" (dict "component" "api") | nindent 8 }}
         {{- include "statline.netpol.prometheus" . | nindent 8 }}
+        {{- include "statline.netpol.smoke" . | nindent 8 }}
       ports:
         - protocol: TCP
           port: {{ .Values.predicciones.port }}

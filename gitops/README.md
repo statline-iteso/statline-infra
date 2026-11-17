@@ -74,7 +74,7 @@ The synced Secret exists only while a pod mounts the CSI volume. Every pod that 
 
 ## Not here yet
 
-HPA, PodDisruptionBudgets and NetworkPolicies are built (SL-55, SL-56; see `docs/DECISIONS.md` D-21 and `docs/ARCHITECTURE.md` 5.1). Smoke-test hooks are a separate task. Add them as new templates under `charts/statline/templates/`, gated by their own values section. Smoke-test pods can reach web and api by carrying the label `statline.io/smoke: "true"`.
+HPA, PodDisruptionBudgets and NetworkPolicies are built (SL-55, SL-56; see `docs/DECISIONS.md` D-21 and `docs/ARCHITECTURE.md` 5.1), and so are ServiceMonitors (SL-54, below). Post-deploy smoke tests are in `templates/smoke-test.yaml` (see `docs/RUNBOOK.md`). A failed smoke test does not roll back; `make smoke ENV=staging` runs the same checks by hand against k3d or AKS.
 
 ## Monitoring
 
