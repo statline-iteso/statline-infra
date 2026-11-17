@@ -36,6 +36,8 @@ metadata:
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
   backoffLimit: 0
+  # A failed Job is kept for logs (hook policy only deletes on success); the TTL reaps it later.
+  ttlSecondsAfterFinished: {{ .Values.smokeTests.ttlSecondsAfterFinished }}
   activeDeadlineSeconds: {{ .Values.smokeTests.activeDeadlineSeconds }}
   template:
     metadata:

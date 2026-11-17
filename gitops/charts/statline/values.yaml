@@ -212,6 +212,7 @@ smokeTests:
   attempts: 10
   intervalSeconds: 6
   activeDeadlineSeconds: 180
+  ttlSecondsAfterFinished: 3600
   resources:
     requests:
       cpu: 10m
