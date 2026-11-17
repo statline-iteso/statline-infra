@@ -57,11 +57,18 @@ module "datos" {
   depends_on = [module.red]
 }
 
+module "seguridad" {
+  source                 = "../modules/seguridad"
+  name                   = local.name
+  suffix                 = random_string.suffix.result
+  resource_group_name    = azurerm_resource_group.main.name
+  location               = var.location
+  csi_identity_object_id = module.aks.key_vault_csi_identity_object_id
+  database_urls          = module.datos.database_urls
+  tags                   = local.tags
+}
+
 # ── Pending (second half, see docs/BACKLOG.md) ──────────────────────────────
-#
-# TODO(SL-09) module "seguridad": Key Vault (RBAC, purge protection), secrets DATABASE_URL
-#   (module.datos.database_url), JWT_SECRET, JWT_REFRESH_SECRET, API_SPORTS_KEY, and
-#   "Key Vault Secrets User" for module.aks.key_vault_csi_identity_object_id.
 #
 # TODO(SL-10) module "observabilidad": log_analytics_workspace + diagnostic_settings for AKS,
 #   PostgreSQL and Key Vault; then wire oms_agent in module aks.
