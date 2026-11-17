@@ -25,8 +25,8 @@ output "database_urls" {
     for name, db in azurerm_postgresql_flexible_server_database.app :
     trimprefix(name, "statline_") => format(
       "postgresql://%s:%s@%s:5432/%s?sslmode=require",
-      azurerm_postgresql_flexible_server.main.administrator_login,
-      random_password.admin.result,
+      urlencode(azurerm_postgresql_flexible_server.main.administrator_login),
+      urlencode(random_password.admin.result),
       azurerm_postgresql_flexible_server.main.fqdn,
       db.name,
     )
