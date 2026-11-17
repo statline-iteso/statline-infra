@@ -23,6 +23,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-13 | 2026-11-16 | k3d (k3s 1.30) for local clusters, Traefik disabled in favor of ingress-nginx | Decided |
 | D-14 | 2026-11-16 | Docs in English; course-delivery sections and domain names in Spanish | Decided |
 | D-15 | 2026-11-16 | `develop` is the default branch; `main` only receives `release/*` and `hotfix/*` | Decided |
+| D-16 | 2026-11-16 | Log Analytics with a 0.5 GB/day cap; AKS diagnostics without `kube-audit` (cheap category list) | Decided |
 
 ## 2. Details
 
@@ -43,6 +44,17 @@ The proposal says `cd.yml` updates "el repositorio GitOps". Keeping `gitops/` in
 
 ### D-12 · Migrations in an initContainer
 `prisma migrate deploy` is idempotent and takes an advisory lock, so two replicas starting together don't race. Rolling back an image does **not** roll back the schema; migrations must be backward compatible (expand, then contract).
+
+### D-16 · Log Analytics with a daily cap and cheap AKS categories
+Log Analytics (`log-statline`, PerGB2018) bills per GB ingested, with no fixed monthly fee. Two guards keep the student credit safe:
+- **Daily cap** `daily_quota_gb = 0.5` (variable `log_analytics_daily_quota_gb`, must be > 0). Ingestion stops when the cap is reached, so a noisy resource cannot run up the bill. **Trade-off:** logs after the cap are lost for the rest of the day, and the Azure cap-reached alert is not configured yet.
+- **AKS without `kube-audit`** (and without `kube-audit-admin`, `csi-*`, `cloud-controller-manager`). `kube-audit` logs every API request and is the largest category. The chosen set covers the control plane and autoscaler, which is what the course needs to debug. Metrics (AllMetrics) are still sent.
+
+Cost (estimate, check the Azure price calculator for the region): pay-as-you-go is roughly USD 2–3 per GB ingested (East US), with a small free allowance. At the cap, worst case is 0.5 GB/day × 30 ≈ 15 GB/month ≈ USD 35/month. The expected volume with these categories is far lower. Retention 30 days is the minimum for PerGB2018 and costs nothing extra up to that point.
+
+**Why not allLogs everywhere:** kube-audit and csi logs would hit the cap in hours and hide the rest. PostgreSQL uses allLogs because its volume is low on a B1ms server.
+
+**Dependency:** the workspace has no inputs from other modules, so aks (`oms_agent`) can take its id while observabilidad takes the aks and datos ids for diagnostics. No cycle (checked with `terraform graph`).
 
 ## 3. Known limitations
 

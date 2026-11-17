@@ -28,3 +28,13 @@ output "database_url" {
   value       = module.datos.database_url
   sensitive   = true
 }
+
+output "log_analytics_workspace_id" {
+  description = "Log Analytics workspace id (log-statline)."
+  value       = module.observabilidad.log_analytics_workspace_id
+}
+
+output "log_analytics_workspace_name" {
+  description = "Log Analytics workspace name; query it with az monitor log-analytics query."
+  value       = module.observabilidad.log_analytics_workspace_name
+}
