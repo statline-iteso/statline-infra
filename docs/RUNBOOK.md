@@ -1,6 +1,6 @@
 # Runbook
 
-Operational procedures for the StatLine cluster. Sections are short and each one names its command. SL-60 extends this file (alerts, incident handling). Decisions behind these steps are in `docs/DECISIONS.md` (D-21 to D-23).
+Operational procedures for the StatLine cluster. Sections are short and each one names its command. SL-60 extends this file (alerts, incident handling). Decisions behind these steps are in `docs/DECISIONS.md` (D-33 to D-35).
 
 Replace the placeholders before use: `<dominio>` is the environment host, `<ID>` a row from `argocd app history`, `<bump-sha>` the commit where `cd.yml` changed the image tag.
 
@@ -134,4 +134,4 @@ helm -n statline-staging rollback statline <REVISION>
 
 ## 4. Argo CD retry behavior
 
-Staging and prod use `syncPolicy.retry.limit: 2` with backoff from 10 s (factor 2, max 5 min). A failing hook therefore runs at most three times, not six (D-23). After the limit, Argo stops retrying and waits for a new commit or a manual sync. The platform Applications (redis, plataforma-config) keep `limit: 5`.
+Staging and prod use `syncPolicy.retry.limit: 2` with backoff from 10 s (factor 2, max 5 min). A failing hook therefore runs at most three times, not six (D-35). After the limit, Argo stops retrying and waits for a new commit or a manual sync. The platform Applications (redis, plataforma-config) keep `limit: 5`.

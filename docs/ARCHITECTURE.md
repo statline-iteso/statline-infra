@@ -15,7 +15,7 @@ What runs where, how it gets there, and the contracts with the backend and front
    │ web (2)    │   │ api (2–6) │────▶│ predicciones │ (1–4)
    │ nginx SPA  │   │ Node 20   │     │ FastAPI      │
    └────────────┘   └──┬─────┬──┘     └──────┬───────┘
-                       │     │ Redis (planned SL-31)
+                       │     │ Redis
                        │     ▼               │
    CronJob ingesta-*   │  ┌───────┐          │
    (3 schedules) ──────┼─▶│ PG 16 │◀─────────┘   PostgreSQL Flexible Server, private subnet
@@ -43,12 +43,12 @@ One AKS cluster, three namespaces: `plataforma` (shared charts), `statline-stagi
 | `aks` | done | `id-statline-aks` (user-assigned) with *Network Contributor* on `snet-aks` · `aks-statline` 1.30, node pool `system` 2→4 × Standard_B2s, Azure CNI, Azure network policy, service CIDR 10.1.0.0/16, OIDC issuer, workload identity, Key Vault Secrets Store CSI add-on (rotation 5 min) |
 | `datos` | done | `psql-statline-<5>` PostgreSQL 16 `B_Standard_B1ms`, 32 GiB auto-grow, 7-day backups, private access only, `require_secure_transport=on` · databases `statline_staging` and `statline_prod` (`prevent_destroy`, D-16) · admin password from `random_password` |
 | `seguridad` | done | `kv-statline-<5>` Standard, RBAC (`rbac_authorization_enabled`), soft delete 7 days, purge protection off, public access with default Allow (D-18) · *Key Vault Secrets Officer* for the deployer · *Key Vault Secrets User* for the CSI add-on identity · secrets below |
-| `observabilidad` | planned (SL-10) | `log-statline` (30 days) · `diagnostic_settings` for AKS, PostgreSQL, Key Vault · AKS `oms_agent` |
+| `observabilidad` | done (SL-10) | `log-statline` Log Analytics, PerGB2018, 30 days retention, daily cap 0.5 GB (`log_analytics_daily_quota_gb`) · one `azurerm_monitor_diagnostic_setting` per entry of `recursos_diagnostico` (`diag-aks`, `diag-postgres`), destination *Dedicated* tables. AKS: `kube-apiserver`, `kube-controller-manager`, `kube-scheduler`, `cluster-autoscaler`, `guard` + AllMetrics. PostgreSQL: `allLogs` group + AllMetrics. Key Vault: `allLogs` group + AllMetrics |
 | `principal` (SL-12) | done | `azurerm_public_ip.ingress` (Standard, Static, `rg-statline`) · `azurerm_role_assignment` Network Contributor on `rg-statline` for the AKS identity · `kubernetes`/`helm` providers from `module.aks.kube_config` |
 | `dns` | done (SL-12, only if `dominio` is set) | `azurerm_dns_zone` `dominio` · A records `@` and `staging` → ingress IP (TTL 300) |
-| `plataforma` | done (SL-12) | `kubernetes_namespace` ×3 (`plataforma`, `statline-staging`, `statline-prod`, label `statline.io/ambiente`) · `random_password` Grafana · `helm_release`: ingress-nginx 4.15.1, cert-manager v1.21.3, argo-cd 10.11.6, kube-prometheus-stack 92.16.0 — all in `plataforma`. Redis is a StatefulSet in the GitOps chart (D-16) |
+| `plataforma` | done (SL-12) | `kubernetes_namespace` ×3 (`plataforma`, `statline-staging`, `statline-prod`, label `statline.io/ambiente`) · `random_password` Grafana · `helm_release`: ingress-nginx 4.15.1, cert-manager v1.21.3, argo-cd 10.11.6, kube-prometheus-stack 92.16.0 — all in `plataforma`. Redis is a StatefulSet in the GitOps chart (D-20) |
 
-Outputs other repos or the chart rely on: `aks_cluster_name`, `resource_group_name`, `key_vault_csi_identity_client_id`, `postgres_fqdn`, `key_vault_name`, `key_vault_uri`, `tenant_id` (for the SecretProviderClass). `database_url` was removed: the URLs live only in Key Vault. Renaming one is a contract change.
+Outputs other repos or the chart rely on: `aks_cluster_name`, `resource_group_name`, `aks_oidc_issuer_url`, `key_vault_csi_identity_client_id`, `postgres_fqdn`, `key_vault_name`, `key_vault_uri`, `tenant_id` (SecretProviderClass), `log_analytics_workspace_id`, `log_analytics_workspace_name`, `ingress_public_ip`, `dns_name_servers` (null without `dominio`), `grafana_admin_password` (sensitive). Renaming one is a contract change. Key Vault, PostgreSQL and AKS all send diagnostics to `log-statline`.
 
 ### Key Vault secrets (contract)
 
@@ -60,21 +60,9 @@ Names are fixed; the SecretProviderClass (SL-58) and the backend read them by th
 | `jwt-secret-<env>` | `JWT_SECRET`, 64 chars | yes | `random_password` |
 | `jwt-refresh-secret-<env>` | `JWT_REFRESH_SECRET`, 64 chars | yes | `random_password` |
 | `api-sports-key` | `API_SPORTS_KEY` | no (one quota for all envs) | placeholder `set-me`, set out of band; Terraform ignores later changes |
+| `balldontlie-api-key` | `BALLDONTLIE_API_KEY` (ingesta NBA fallback) | no | placeholder `set-me`, set out of band before enabling `FALLBACK_HABILITADO`; Terraform ignores later changes |
 
 The Kubernetes Secret `statline-secrets` maps these to the env names the images expect (§5).
-| `aks` | done | `id-statline-aks` (user-assigned) with *Network Contributor* on `snet-aks` · `aks-statline` 1.30, node pool `system` 2→4 × Standard_B2s, Azure CNI, Azure network policy, service CIDR 10.1.0.0/16, OIDC issuer, workload identity, Key Vault Secrets Store CSI add-on (rotation 5 min), `oms_agent` (Container Insights, MSI auth) to `log-statline` |
-| `datos` | done | `psql-statline-<5>` PostgreSQL 16 `B_Standard_B1ms`, 32 GiB auto-grow, 7-day backups, private access only, `require_secure_transport=on` · database `statline` (`prevent_destroy`) · admin password from `random_password` |
-| `seguridad` | planned (SL-09) | `kv-statline-<5>` (RBAC, purge protection, network ACLs) · secrets `database-url`, `jwt-secret`, `jwt-refresh-secret`, `api-sports-key` · *Key Vault Secrets User* for the CSI add-on identity |
-| `observabilidad` | done (SL-10) | `log-statline` Log Analytics, PerGB2018, 30 days retention, daily cap 0.5 GB (`log_analytics_daily_quota_gb`) · one `azurerm_monitor_diagnostic_setting` per entry of `recursos_diagnostico` (`diag-aks`, `diag-postgres`), destination *Dedicated* tables. AKS: `kube-apiserver`, `kube-controller-manager`, `kube-scheduler`, `cluster-autoscaler`, `guard` + AllMetrics. PostgreSQL: `allLogs` group + AllMetrics. Key Vault: pending, see below |
-| `seguridad` | planned (SL-09) | `kv-statline-<5>` (RBAC, purge protection, network ACLs) · secrets `database-url-<env>`, `jwt-secret-<env>`, `jwt-refresh-secret-<env>` (`staging`, `prod`), `api-sports-key`, `balldontlie-api-key` · *Key Vault Secrets User* for the CSI add-on identity |
-| `observabilidad` | planned (SL-10) | `log-statline` (30 days) · `diagnostic_settings` for AKS, PostgreSQL, Key Vault · AKS `oms_agent` |
-| `dns` | planned (SL-12) | `dns_zone` · `public_ip` for the ingress (in the node resource group) · A record |
-| `plataforma` | planned (SL-12) | `helm_release`: ingress-nginx, cert-manager, argo-cd, kube-prometheus-stack — all in `plataforma`. Redis is **not** here: it is deployed by Argo CD from `gitops/charts/redis` (D-16) |
-
-Outputs other repos or the chart rely on: `aks_cluster_name`, `resource_group_name`, `key_vault_csi_identity_client_id`, `postgres_fqdn`, `database_url` (sensitive), `log_analytics_workspace_id`, `log_analytics_workspace_name`. Renaming one is a contract change.
-
-**Key Vault diagnostics (pending):** the `seguridad` module (SL-09) is on a parallel branch. Once both merge, add `kv = { resource_id = module.seguridad.key_vault_id }` to `recursos_diagnostico` in `principal/main.tf` (module observabilidad, SL-10 follow-up). Until then Key Vault logs are not sent to Log Analytics.
-Outputs other repos or the chart rely on: `aks_cluster_name`, `resource_group_name`, `key_vault_csi_identity_client_id`, `postgres_fqdn`, `database_url` (sensitive), `ingress_public_ip`, `dns_name_servers` (null without `dominio`), `grafana_admin_password` (sensitive). Renaming one is a contract change.
 
 ### Why private access for PostgreSQL
 
@@ -86,10 +74,10 @@ With a delegated subnet the server has no public endpoint, so the proposal's "fi
 
 | Path | What |
 |---|---|
-| `gitops/charts/statline/` | the environment chart (`Chart.yaml` v2, 0.1.0). Templates: `_helpers.tpl`, `web.yaml`, `api.yaml`, `predicciones.yaml`, `ingesta.yaml` (ServiceAccount, ConfigMap, 3 CronJobs), `ingress.yaml`, `secrets.yaml`, `dev-postgres.yaml` (k3d only), `smoke-test.yaml` (post-deploy smoke Job, D-21; script in `files/smoke-test.sh`) |
+| `gitops/charts/statline/` | the environment chart (`Chart.yaml` v2, 0.1.0). Templates: `_helpers.tpl`, `web.yaml`, `api.yaml`, `predicciones.yaml`, `ingesta.yaml` (ServiceAccount, ConfigMap, 3 CronJobs), `ingress.yaml`, `secrets.yaml`, `dev-postgres.yaml` (k3d only), `smoke-test.yaml` (post-deploy smoke Job, D-33; script in `files/smoke-test.sh`) |
 | `gitops/charts/statline/values.yaml` | documented defaults. Not renderable alone: image tags are required |
 | `gitops/charts/statline/values-{staging,prod,k3d}.yaml` | one file per environment. Argo CD renders staging and prod; `make k3d-deploy` renders k3d |
-| `gitops/charts/redis/` | Redis StatefulSet, Service and ServiceAccount for `plataforma` (D-16) |
+| `gitops/charts/redis/` | Redis StatefulSet, Service and ServiceAccount for `plataforma` (D-26) |
 | `gitops/argocd/` | `project.yaml` (AppProject `statline`), `root.yaml` (app of apps), `apps/` (statline-staging, statline-prod, redis, plataforma-config) |
 | `gitops/plataforma/` | cert-manager `ClusterIssuer`s `letsencrypt-staging` and `letsencrypt-prod` |
 
@@ -103,7 +91,7 @@ Naming and labels: objects are named `<release>-<component>` (release `statline-
 |---|---|---|
 | Namespace | 3 | `plataforma`, `statline-staging`, `statline-prod` |
 | Deployment | 3 per env | `web` (2 replicas), `api`, `predicciones` |
-| StatefulSet | 1 | Redis 7 (our own manifest in the GitOps chart, in `plataforma`; not a Bitnami chart, D-16) |
+| StatefulSet | 1 | Redis 7 (our own manifest in the GitOps chart, in `plataforma`; not a Bitnami chart, D-26) |
 | CronJob | 3 per env | `ingesta-basquetbol` `0 8 * * *` · `ingesta-americano` `0 8 * * 2` · `ingesta-futbol` `0 8 * * 1,5` (UTC) |
 | Service | 4 | ClusterIP for web, api, predicciones and Redis |
 | Ingress | 1 per env | `/` → web, `/api` → api; TLS via cert-manager |
@@ -120,9 +108,9 @@ Naming and labels: objects are named `<release>-<component>` (release `statline-
 | ConfigMap | 1 for api, predicciones, ingesta | non-secret settings. Web has no env, so it has no ConfigMap. Changes roll the pods through a `checksum/config` annotation |
 | SecretProviderClass or Secret | 1 per env | see 4.3 |
 | HPA | 2 per env (staging, prod) | `autoscaling/v2`. api 2–6 at 70 % CPU; predicciones 1–4 at 75 % CPU; scale-down stabilization 300 s. When enabled, the Deployment omits `spec.replicas`. Needs metrics-server (AKS and k3s have it). Disabled in k3d |
-| PodDisruptionBudget | 3 per env | web and api `minAvailable: 1`; predicciones `maxUnavailable: 1` (D-21). Disabled for web and api in k3d (single replica) |
+| PodDisruptionBudget | 3 per env | web and api `minAvailable: 1`; predicciones `maxUnavailable: 1` (D-31). Disabled for web and api in k3d (single replica) |
 | NetworkPolicy | ~10 per env | default-deny ingress and egress, then one allow policy per flow (5.1). Enabled in staging, prod and k3d |
-| Job | 1 per env | `<release>-smoke`: post-deploy smoke test, PostSync and Helm hook (D-21). Pod label `statline.io/smoke: "true"` lets it reach web, api and predicciones (NetworkPolicies) |
+| Job | 1 per env | `<release>-smoke`: post-deploy smoke test, PostSync and Helm hook (D-33). Pod label `statline.io/smoke: "true"` lets it reach web, api and predicciones (NetworkPolicies) |
 | HPA | 2 per env | api 2–6 at 70 % CPU; predicciones 1–4 at 75 % CPU. **Later task** |
 
 ### 4.3 Secret mapping
@@ -146,7 +134,7 @@ Key Vault object names (`secrets.csi.objects`): staging uses `database-url-stagi
 
 ### 4.4 Redis
 
-Own StatefulSet (1 replica, `redis:7.4-alpine`, uid 999, read-only root filesystem), with `--save ""`, `--appendonly no`, `maxmemory 128mb` and `allkeys-lru`. It is a cache, so `/data` is an emptyDir by default (`persistence.enabled` adds a PVC). Clients use `redis://redis.plataforma.svc.cluster.local:6379/<db>`: DB 0 for prod, DB 1 for staging, so the two environments never share keys (D-16). It has no auth, so its own NetworkPolicy (chart `gitops/charts/redis`) accepts port 6379 only from api pods in namespaces labelled `statline.io/ambiente` (Terraform sets the label on the statline namespaces; `make k3d-up` sets it locally). Redis gets no PodDisruptionBudget: it is one cache replica, and eviction costs only cache misses.
+Own StatefulSet (1 replica, `redis:7.4-alpine`, uid 999, read-only root filesystem), with `--save ""`, `--appendonly no`, `maxmemory 128mb` and `allkeys-lru`. It is a cache, so `/data` is an emptyDir by default (`persistence.enabled` adds a PVC). Clients use `redis://redis.plataforma.svc.cluster.local:6379/<db>`: DB 0 for prod, DB 1 for staging, so the two environments never share keys (D-26). It has no auth, so its own NetworkPolicy (chart `gitops/charts/redis`) accepts port 6379 only from api pods in namespaces labelled `statline.io/ambiente` (Terraform sets the label on the statline namespaces; `make k3d-up` sets it locally). Redis gets no PodDisruptionBudget: it is one cache replica, and eviction costs only cache misses.
 
 The api Deployment has an **initContainer** that runs `prisma migrate deploy` with the same image (`node_modules/.bin/prisma migrate deploy`), so the schema is migrated before the new version serves traffic.
 
@@ -185,7 +173,7 @@ The api has no `statline_cache_requests_total` yet. The cache panels and nothing
 
 **Dashboards** (Grafana, folder root; every dashboard has a `datasource` variable of type datasource and a `namespace` variable):
 
-- `StatLine · API`: requests per second, 5xx ratio, p95 latency, cache hit ratio (pending metric), request rate and 5xx ratio by route and status, p50/p95/p99, deployment replicas, HPA replicas (empty until SL-55), CPU as a share of request against the HPA target.
+- `StatLine · API`: requests per second, 5xx ratio, p95 latency, cache hit ratio, request rate and 5xx ratio by route and status, p50/p95/p99, deployment replicas, HPA replicas (empty until SL-55), CPU as a share of request against the HPA target.
 - `StatLine · Predicciones e ingesta`: predicciones request rate, 5xx ratio, p95 latency and target up, requests and latency by path, failed ingesta Jobs, CronJob last successful run and time since, failed Jobs by CronJob.
 
 Dashboard uids are `statline-api-<env>` and `statline-pred-ingesta-<env>`, and the ConfigMap data keys start with the namespace, so staging and prod coexist in Grafana. Scraping `/metrics` is in-cluster only; the NetworkPolicy task (SL-55) must allow Prometheus to reach api and predicciones.
@@ -201,7 +189,7 @@ Source of truth: backend `docs/ARCHITECTURE.md §8`. Summary:
 | `statline/ingesta` | 8080 (`serve`) | `/healthz`, `/readyz` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA`, `THESPORTSDB_API_KEY` (3), `FALLBACK_HABILITADO` (`false`) | `DATABASE_URL`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY` (optional) |
 | `statline/web` | 8080 | `/healthz` | — | — |
 
-`/readyz` of the api also checks Redis when `REDIS_URL` is set. The api trusts one proxy hop (ingress-nginx, `trust proxy` = 1). With `api.ingestaLanzador: kubernetes` the chart mounts the ServiceAccount token and renders a Role (`get` on `cronjobs`, `create` on `jobs`, group `batch`) and RoleBinding in the release namespace; otherwise none of that is rendered (D-20).
+`/readyz` of the api also checks Redis when `REDIS_URL` is set. The api trusts one proxy hop (ingress-nginx, `trust proxy` = 1). With `api.ingestaLanzador: kubernetes` the chart mounts the ServiceAccount token and renders a Role (`get` on `cronjobs`, `create` on `jobs`, group `batch`) and RoleBinding in the release namespace; otherwise none of that is rendered (D-30).
 
 CronJob args: `["run", "basquetbol"]`, `["run", "americano"]`, `["run", "futbol"]`. Exit code ≠ 0 marks the Job failed. All images run as non-root and work with `readOnlyRootFilesystem` (ingesta and predicciones need an `emptyDir` on `/tmp`).
 
@@ -219,7 +207,7 @@ Every pod in a release namespace starts with `default-deny` (ingress and egress)
 | api → predicciones | 8000 | same namespace | forecasts |
 | api → Redis | 6379 | `redis` (plataforma, `app.kubernetes.io/name: redis`) | cache |
 | api → PostgreSQL | 5432 | `postgresCidr` (10.0.16.0/24, `snet-postgres`) | Prisma, readiness |
-| api → Kubernetes API | `kubeApiPorts` (443, 6443) | `kubeApiCidr`, **required** when `api.ingestaLanzador: kubernetes` | on-demand ingestion Jobs (D-20) |
+| api → Kubernetes API | `kubeApiPorts` (443, 6443) | `kubeApiCidr`, **required** when `api.ingestaLanzador: kubernetes` | on-demand ingestion Jobs (D-30) |
 | predicciones ← api | 8000 | same namespace | forecasts |
 | predicciones ← Prometheus | 8000 | `prometheus` | metrics |
 | predicciones → PostgreSQL | 5432 | `postgresCidr` | models and data |
@@ -234,13 +222,10 @@ Nothing else is allowed: web has no egress beyond DNS, ingesta has no ingress, a
 
 1. **CI (`ci.yml`, every repo, every push and PR):** lint and types; unit tests with a 70 % coverage gate (Vitest, Jest + Supertest, pytest); integration tests against an ephemeral PostgreSQL; multi-stage image builds; **Trivy** fails on HIGH/CRITICAL. Infra: `terraform fmt/validate`, `tflint`, `terraform plan` posted as a PR comment, and `helm lint --strict` plus `kubeconform` for the chart.
 2. **Quality gate:** `develop` and `main` are protected: CI must pass and one reviewer must approve.
-3. **Artifacts (`cd.yml`, planned SL-53):** on merge, push `statline/<image>:<short-sha>` (and `vX.Y.Z` on release branches) to Docker Hub, then commit the new tag to `gitops/values-<env>.yaml` in this repo.
-4. **GitOps sync (planned SL-53):** Argo CD watches `gitops/` and syncs `statline-staging` (from `develop`) and `statline-prod` (from `main`).
-5. **Verify (SL-57):** a PostSync hook Job (`<release>-smoke`, D-21) checks `/healthz` of web and `/healthz` + `/readyz` of api and predicciones, from inside the namespace. A failed check fails the sync. **Argo CD does not roll back**: the new pods keep running. Rollback is a `git revert` of the image-tag bump (D-22). See `docs/RUNBOOK.md`.
-3. **Artifacts (app repos, `cd.yml`):** on push to `develop` or `main`, and on `vX.Y.Z` tags, each app repo pushes `statline/<image>:<short-sha>` (and `vX.Y.Z` on tags) to Docker Hub, scans the pushed image with Trivy, then sends `repository_dispatch` `bump-image` to this repo. `develop` → staging, `main` and tags → prod.
+3. **Artifacts (app repos, `cd.yml`):** on push to `develop` or `main`, and on `vX.Y.Z` tags, each app repo pushes `statline/<image>:<short-sha>` (and `vX.Y.Z` on tags) to Docker Hub, builds it locally, scans it with Trivy before pushing, then sends `repository_dispatch` `bump-image` to this repo. `develop` → staging, `main` and tags → prod.
 4. **Tag bump (`cd.yml` here):** validates the request (source repo allowlist, env, image, tag format), sets `<image>.image.tag` in `gitops/charts/statline/values-<env>.yaml` with `scripts/bump-image-tags.sh` (awk, keeps the file layout), runs `helm lint --strict` on that values file, and pushes `ci(gitops): bump …` to `develop` (staging) or `main` (prod) with `GITHUB_TOKEN`. Pushes that lose a race are retried after a rebase-free reset to `origin`. Manual runs: `workflow_dispatch` with env, image and tag.
 5. **GitOps sync:** Argo CD watches `gitops/` and syncs `statline-staging` (from `develop`) and `statline-prod` (from `main`).
-6. **Verify and roll back (planned SL-57):** a PostSync hook Job curls `/healthz` and `/readyz`; on failure Argo CD rolls back to the last healthy revision.
+6. **Verify (SL-57):** a PostSync hook Job (`<release>-smoke`, D-33) checks `/healthz` of web and `/healthz` + `/readyz` of api and predicciones, from inside the namespace. A failed check fails the sync. **Argo CD does not roll back**: the new pods keep running. Rollback is a `git revert` of the image-tag bump (D-34). See `docs/RUNBOOK.md`.
 
 ## 7. Branch strategy
 
@@ -252,7 +237,7 @@ Nothing else is allowed: web has no egress beyond DNS, ingesta has no ingress, a
 
 | Task | How |
 |---|---|
-| First deploy | `make bootstrap` → `make apply-aks` → `make plan` → `make apply` → `az aks get-credentials` (D-20) |
+| First deploy | `make bootstrap` → `make apply-aks` → `make plan` → `make apply` → `az aks get-credentials` (D-24) |
 | Daily stop | `make destroy` (data is lost unless dumped: `pg_dump` through a client pod first) |
 | DB shell | `kubectl run psql --rm -it --image=postgres:16-alpine -- psql "$DATABASE_URL"` |
 | Rotate a secret | update it in Key Vault; the CSI driver re-syncs within 5 min; restart the Deployment |

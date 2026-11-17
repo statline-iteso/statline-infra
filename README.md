@@ -3,10 +3,10 @@
 Infrastructure for **StatLine**, a web platform for unified sports statistics and performance forecasts across three leagues: **NBA** (basketball), **NFL** (American football) and **Liga MX** (football). Scheduled jobs pull games and box scores from API-Sports, a REST API serves comparisons and standings, and a Python service produces match-outcome probabilities and player projections.
 
 This repo holds:
-- **Terraform** for every Azure resource: `bootstrap` (state storage) and `principal` (network, AKS, PostgreSQL, ingress IP, platform Helm releases, and *(planned)* Key Vault, Log Analytics; DNS when a domain is set)
+- **Terraform** for every Azure resource: `bootstrap` (state storage) and `principal` (network, AKS, PostgreSQL, Key Vault, Log Analytics, ingress IP, platform Helm releases; DNS when a domain is set)
 - the `make` targets that bootstrap state, plan and apply
 - a **k3d** setup for testing the Kubernetes manifests locally
-- *(planned)* the **GitOps** chart and Argo CD applications that deploy the four images
+- the **GitOps** charts (`gitops/charts/statline`, `gitops/charts/redis`) and the Argo CD applications that deploy the four images
 - the project-wide docs: architecture, data model, API design, backlog and pending work
 
 The app itself lives in [`statline-backend`](https://github.com/statline-iteso/statline-backend) and [`statline-frontend`](https://github.com/statline-iteso/statline-frontend).
@@ -112,7 +112,7 @@ terraform -chdir=terraform/principal output -raw grafana_admin_password   # Graf
 **Two-step first apply.** The `kubernetes` and `helm` providers read the cluster's kubeconfig from
 `module.aks`. On a cluster that does not exist yet those values are unknown, so a single
 `make plan` can fail on the providers. `make apply-aks` creates the cluster alone; after that every
-plan is normal. The same applies when the cluster is recreated from scratch (decision D-20).
+plan is normal. The same applies when the cluster is recreated from scratch (decision D-24).
 
 **Domain (optional).** Set `dominio` in `principal.auto.tfvars` when the team decides it. Then Terraform
 creates the DNS zone and the `@` and `staging` A records, and `terraform output dns_name_servers` lists

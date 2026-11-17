@@ -18,7 +18,7 @@ ITESO final project, Fall 2026: **Juan Pablo González** (backend, frontend, fou
 
 | Repo | Contains |
 |---|---|
-| **`statline-infra`** (this one) | **Terraform** for every Azure resource. **k3d** for local clusters. *(planned)* The **GitOps** Helm chart and **Argo CD** applications. Project-wide docs (data model, API design, backlog). |
+| **`statline-infra`** (this one) | **Terraform** for every Azure resource. **k3d** for local clusters. The **GitOps** Helm charts and **Argo CD** applications. Project-wide docs (data model, API design, backlog). |
 | `statline-backend` | `services/api` (Node 20, Express, Prisma), `services/ingesta` and `services/predicciones` (Python 3.12), `schemas/`, their Dockerfiles and CI. |
 | `statline-frontend` | React 18 SPA (Vite, Tailwind, TanStack Query, Recharts), its Dockerfile (nginx) and CI. |
 
@@ -52,7 +52,7 @@ Out of scope: fantasy-platform sync (ESPN, Yahoo), betting odds, multi-region, s
 | Data | **PostgreSQL 16** Flexible Server `B_Standard_B1ms`, private access only (delegated subnet + private DNS zone) |
 | Secrets | **Azure Key Vault** + Secrets Store CSI Driver (`SecretProviderClass`) |
 | Ingress | **ingress-nginx** + **cert-manager** (Let's Encrypt) |
-| Cache | **Redis 7.4** (own StatefulSet chart, `gitops/charts/redis`, D-16) |
+| Cache | **Redis 7.4** (own StatefulSet chart, `gitops/charts/redis`, D-26) |
 | GitOps | **Argo CD**; Helm chart with `values-staging.yaml` / `values-prod.yaml` |
 | Observability | **kube-prometheus-stack** (Prometheus, Grafana), Log Analytics + diagnostic settings |
 | Images | **Docker Hub**: `statline/web`, `statline/api`, `statline/predicciones`, `statline/ingesta` (short SHA + SemVer) |

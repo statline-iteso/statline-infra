@@ -1,5 +1,5 @@
 {{- if .Values.networkPolicy.enabled }}
-# Redis accepts connections only from api pods in statline namespaces (D-16, D-21).
+# Redis accepts connections only from api pods in statline namespaces (D-26, D-31).
 # Redis is a cache with no outbound needs, so egress is denied entirely (policyTypes Egress, no rules).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

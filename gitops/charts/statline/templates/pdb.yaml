@@ -1,7 +1,7 @@
 {{- /*
 PodDisruptionBudgets (policy/v1) for web, api and predicciones. Each entry sets exactly one of
 minAvailable or maxUnavailable. A single-replica workload must not use minAvailable: 1, because
-that blocks voluntary evictions (node drains) forever (D-21).
+that blocks voluntary evictions (node drains) forever (D-31).
 */ -}}
 {{- $targets := list
   (dict "component" "web" "cfg" .Values.web.pdb "tag" .Values.web.image.tag)

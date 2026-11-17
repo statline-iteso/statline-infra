@@ -4,6 +4,10 @@ Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** 
 
 **Avance:** 32 de 61 issues · 144 de 277 puntos (52 %).
 
+> **Estado de integración (2026-11-16).** Los 27 issues de código (todos menos SL-60 y SL-61) están implementados y revisados en ramas locales `feature/SL-XX-*`, integradas en `integracion/v1` de cada repo. Aún no hay push ni PR (la cuenta no tiene permiso de escritura en GitHub). El tablero y BACKLOG cambian a ✅ cuando cada PR se fusione en `develop`.
+>
+> Decisiones que faltan al desplegar: correo de contacto de los ClusterIssuers (`gitops/plataforma/cluster-issuers.yaml`, hoy `change-me@example.com`), `networkPolicies.kubeApiCidr` si se usa `api.ingestaLanzador: kubernetes`, valores reales de `api-sports-key` y `balldontlie-api-key` en Key Vault, dominio (`dominio`) y versión de AKS.
+
 ## Infraestructura (statline-infra)
 
 | # | Pendiente | Issue | Pts |
@@ -52,7 +56,7 @@ Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** 
 
 - **Secrets de CI (infra):** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (app registration con credencial federada para GitHub OIDC) y `TFSTATE_RESOURCE_GROUP`, `TFSTATE_STORAGE_ACCOUNT` (salen de `make bootstrap`). Sin ellos el job `plan` se salta.
 - **Secrets de CD (app repos `statline-backend` y `statline-frontend`):** `DOCKERHUB_USERNAME` y `DOCKERHUB_TOKEN` (push a Docker Hub) e `INFRA_DISPATCH_TOKEN`, un PAT fino con `contents: write` sobre `statline-infra` (solo para el `repository_dispatch`).
-- **Permiso de escritura del bot en infra:** `cd.yml` de infra hace `git push` con `GITHUB_TOKEN` a `develop` (staging) y `main` (prod). Las ramas protegidas deben permitir a `github-actions[bot]` hacer push (Settings → Rulesets → bypass), o cambiar el paso de push por un PR con auto-merge (ver DECISIONS D-21). Sin esto el workflow falla en el push.
+- **Permiso de escritura del bot en infra:** `cd.yml` de infra hace `git push` con `GITHUB_TOKEN` a `develop` (staging) y `main` (prod). Las ramas protegidas deben permitir a `github-actions[bot]` hacer push (Settings → Rulesets → bypass), o cambiar el paso de push por un PR con auto-merge (ver DECISIONS D-36). Sin esto el workflow falla en el push.
 - **Docker Hub:** crear los repositorios `statline/web`, `statline/api`, `statline/predicciones` y `statline/ingesta` y el token de acceso antes de la primera ejecución de `cd.yml`.
 - **AKS 1.30:** confirmar con `az aks get-versions -l eastus2` que se puede crear; si no, usar la versión soportada más antigua y registrarlo en DECISIONS.
 

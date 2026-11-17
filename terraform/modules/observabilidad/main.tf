@@ -29,7 +29,7 @@ resource "azurerm_monitor_diagnostic_setting" "this" {
     }
   }
 
-  # Explicit list: only these categories (cheap defaults in principal, see DECISIONS D-16).
+  # Explicit list: only these categories (cheap defaults in principal, see DECISIONS D-19).
   # Azure rejects unsupported names at apply time.
   dynamic "enabled_log" {
     for_each = each.value.log_categories == null ? toset([]) : toset(each.value.log_categories)
