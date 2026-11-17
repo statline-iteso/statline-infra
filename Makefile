@@ -6,7 +6,7 @@ TF := terraform
 PRINCIPAL := terraform/principal
 BOOTSTRAP := terraform/bootstrap
 
-.PHONY: help bootstrap backend-config init plan apply destroy output fmt validate tflint lint k3d-up k3d-down diagram
+.PHONY: help bootstrap backend-config init plan apply destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy diagram
 
 help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-16s %s\n",$$1,$$2}'
@@ -47,16 +47,39 @@ validate: ## terraform validate without a backend
 tflint: ## tflint with the azurerm ruleset
 	cd terraform && tflint --init && tflint --recursive --config "$$PWD/.tflint.hcl"
 
-lint: ## fmt check + validate + tflint + shellcheck
+# Helm: values files are the environments; the defaults file alone is not renderable (image tags are required).
+VALUES := $(wildcard gitops/charts/statline/values-*.yaml)
+K8S_VERSION := 1.30.6
+# Built-in schemas, then the datree CRDs catalog (SecretProviderClass, ClusterIssuer, Argo CD).
+KUBECONFORM_FLAGS := -strict -summary -ignore-missing-schemas -kubernetes-version $(K8S_VERSION) \
+	-schema-location default \
+	-schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+
+helm-lint: ## helm lint --strict: redis, and statline with each environment values file
+	helm lint --strict gitops/charts/redis
+	@for f in $(VALUES); do echo "helm lint statline -f $$f"; helm lint --strict gitops/charts/statline -f $$f; done
+
+helm-validate: ## helm template | kubeconform -strict for every chart and environment; also the Argo CD and plataforma manifests
+	@for f in $(VALUES); do echo "validate statline $$f"; helm template statline gitops/charts/statline -f $$f | kubeconform $(KUBECONFORM_FLAGS); done
+	helm template redis gitops/charts/redis | kubeconform $(KUBECONFORM_FLAGS)
+	kubeconform $(KUBECONFORM_FLAGS) gitops/argocd/project.yaml gitops/argocd/root.yaml gitops/argocd/apps/*.yaml gitops/plataforma/*.yaml
+
+lint: ## fmt check + validate + tflint + shellcheck + helm-lint + helm-validate
 	$(TF) fmt -recursive -check terraform
 	$(MAKE) validate tflint
 	shellcheck scripts/*.sh
+	$(MAKE) helm-lint helm-validate
 
 k3d-up: ## Local cluster (k3d) with ingress on :8080
 	scripts/k3d-up.sh
 
 k3d-down: ## Delete the local cluster
 	k3d cluster delete statline
+
+k3d-deploy: ## Install redis (plataforma) and the chart with values-k3d (statline-staging); images must be imported first
+	@ctx=$$(kubectl config current-context); case "$$ctx" in k3d-*) ;; *) echo "Refusing: current context is '$$ctx', not k3d-*"; exit 1;; esac
+	helm upgrade --install redis gitops/charts/redis --namespace plataforma --wait
+	helm upgrade --install statline gitops/charts/statline --namespace statline-staging -f gitops/charts/statline/values-k3d.yaml --wait
 
 diagram: ## Render docs/solucion.mmd → docs/solucion.png
 	npx -y @mermaid-js/mermaid-cli@11.4.0 -i docs/solucion.mmd -o docs/solucion.png -b white -w 1600
