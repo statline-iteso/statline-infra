@@ -45,7 +45,7 @@ One AKS cluster, three namespaces: `plataforma` (shared charts), `statline-stagi
 | `seguridad` | planned (SL-09) | `kv-statline-<5>` (RBAC, purge protection, network ACLs) · secrets `database-url`, `jwt-secret`, `jwt-refresh-secret`, `api-sports-key` · *Key Vault Secrets User* for the CSI add-on identity |
 | `observabilidad` | planned (SL-10) | `log-statline` (30 days) · `diagnostic_settings` for AKS, PostgreSQL, Key Vault · AKS `oms_agent` |
 | `dns` | planned (SL-12) | `dns_zone` · `public_ip` for the ingress (in the node resource group) · A record |
-| `plataforma` | planned (SL-12) | `helm_release`: ingress-nginx, cert-manager, argo-cd, kube-prometheus-stack, redis (Bitnami) — all in `plataforma` |
+| `plataforma` | planned (SL-12) | `helm_release`: ingress-nginx, cert-manager, argo-cd, kube-prometheus-stack — all in `plataforma`. Redis is **not** here: it is deployed by Argo CD from `gitops/charts/redis` (D-16) |
 
 Outputs other repos or the chart rely on: `aks_cluster_name`, `resource_group_name`, `key_vault_csi_identity_client_id`, `postgres_fqdn`, `database_url` (sensitive). Renaming one is a contract change.
 
@@ -53,19 +53,60 @@ Outputs other repos or the chart rely on: `aks_cluster_name`, `resource_group_na
 
 With a delegated subnet the server has no public endpoint, so the proposal's "firewall rules" are replaced by the network boundary: only the VNet (AKS pods) can reach it. Admin access for humans goes through `kubectl run` with a `postgres:16` client pod or `kubectl port-forward` to a pod (D-06).
 
-## 4. Cluster layout (planned SL-53 and E8)
+## 4. Cluster layout (SL-53 chart, SL-58 values; HPA, NetworkPolicy and PDB are later tasks)
+
+### 4.1 Chart layout
+
+| Path | What |
+|---|---|
+| `gitops/charts/statline/` | the environment chart (`Chart.yaml` v2, 0.1.0). Templates: `_helpers.tpl`, `web.yaml`, `api.yaml`, `predicciones.yaml`, `ingesta.yaml` (ServiceAccount, ConfigMap, 3 CronJobs), `ingress.yaml`, `secrets.yaml`, `dev-postgres.yaml` (k3d only) |
+| `gitops/charts/statline/values.yaml` | documented defaults. Not renderable alone: image tags are required |
+| `gitops/charts/statline/values-{staging,prod,k3d}.yaml` | one file per environment. Argo CD renders staging and prod; `make k3d-deploy` renders k3d |
+| `gitops/charts/redis/` | Redis StatefulSet, Service and ServiceAccount for `plataforma` (D-16) |
+| `gitops/argocd/` | `project.yaml` (AppProject `statline`), `root.yaml` (app of apps), `apps/` (statline-staging, statline-prod, redis, plataforma-config) |
+| `gitops/plataforma/` | cert-manager `ClusterIssuer`s `letsencrypt-staging` and `letsencrypt-prod` |
+
+Image tags live on `<component>.image.tag` (`web`, `api`, `predicciones`, `ingesta`). The image is `<global.imageRegistry>/<image.repository>:<tag>`, so `docker.io/statline/api:<tag>`. `cd.yml` is the only writer of those paths in `values-staging.yaml` and `values-prod.yaml`.
+
+Naming and labels: objects are named `<release>-<component>` (release `statline-staging` gives `statline-staging-api`), and the CronJobs `<release>-ingesta-<job>`. `app.kubernetes.io/name` is `statline-<component>` so selectors use that label alone (AGENTS.md section 7). Every object also carries `app.kubernetes.io/{instance,part-of,component,version,managed-by}` and `statline.io/environment`.
+
+### 4.2 Objects per environment
 
 | Object | Count | Detail |
 |---|---|---|
-| Namespace | 3 | `plataforma`, `statline-staging`, `statline-prod` |
-| Deployment | 3 per env | `web` (2 replicas), `api`, `predicciones` |
-| StatefulSet | 1 | Redis (Bitnami chart, in `plataforma`) |
-| CronJob | 3 per env | `ingesta-basquetbol` `0 8 * * *` · `ingesta-americano` `0 8 * * 2` · `ingesta-futbol` `0 8 * * 1,5` (UTC) |
-| Service | 4 | ClusterIP for web, api, predicciones and Redis |
-| Ingress | 1 per env | `/` → web, `/api` → api; TLS via cert-manager |
-| HPA | 2 per env | api 2–6 at 70 % CPU; predicciones 1–4 at 75 % CPU |
-| ConfigMap | 1 per component | non-secret settings (ports, `PREDICCIONES_URL`, `TEMPORADA_*`, log level) |
-| SecretProviderClass | 1 per env | mounts the Key Vault secrets and syncs a Kubernetes Secret `statline-secrets` |
+| Namespace | 3 | `plataforma`, `statline-staging`, `statline-prod` (created by `k3d-up` or ops; Argo uses `CreateNamespace=false`) |
+| Deployment | 3 per env | `web` (2 replicas), `api` (2, initContainer `migrate`), `predicciones` (1) |
+| StatefulSet | 1 | Redis, in `plataforma` (`gitops/charts/redis`) |
+| CronJob | 3 per env | `ingesta-basquetbol` `0 8 * * *` · `ingesta-americano` `0 8 * * 2` · `ingesta-futbol` `0 8 * * 1,5` (UTC). `concurrencyPolicy: Forbid`, `backoffLimit: 1`, `activeDeadlineSeconds: 3600` |
+| Service | 4 | ClusterIP for web, api and predicciones (port 80 to the container port) and `redis` (6379) |
+| Ingress | 1 per env | `/api` → api, `/` → web; class `nginx`; TLS through cert-manager when `ingress.tls.enabled` |
+| ServiceAccount | 1 per workload | `automountServiceAccountToken: false` (a values switch per component) |
+| ConfigMap | 1 for api, predicciones, ingesta | non-secret settings. Web has no env, so it has no ConfigMap. Changes roll the pods through a `checksum/config` annotation |
+| SecretProviderClass or Secret | 1 per env | see 4.3 |
+| HPA | 2 per env | api 2–6 at 70 % CPU; predicciones 1–4 at 75 % CPU. **Later task** |
+
+### 4.3 Secret mapping
+
+`secrets.mode` selects one of two ways to produce the single Kubernetes Secret `statline-secrets`. Its keys are the env var names.
+
+| Mode | Used by | Behavior |
+|---|---|---|
+| `csi` | staging, prod | SecretProviderClass `statline-kv` (provider azure, `useVMManagedIdentity: "true"`, `usePodIdentity: "false"`) reads each Key Vault object in `secrets.csi.objects` (env var → KV name) and syncs it into the Secret. Pods that read secrets mount the CSI volume read-only at `/mnt/secrets-store`, which is what triggers the sync. Rotation: update KV, then restart the Deployment (section 8). |
+| `plain` | k3d only | the chart renders the Secret from `secrets.plain.data`. Values are fake. With `devPostgres.enabled`, `DATABASE_URL` points to the dev Postgres. |
+
+Per workload, the env vars it reads from the Secret (`<component>.secretKeys`, set via `secretKeyRef`):
+
+| Workload | Secret keys |
+|---|---|
+| api (and its migrate initContainer) | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` |
+| predicciones | `DATABASE_URL` |
+| ingesta CronJobs | `DATABASE_URL`, `API_SPORTS_KEY` |
+
+Key Vault object names (`secrets.csi.objects`): staging uses `database-url-staging`, `jwt-secret-staging`, `jwt-refresh-secret-staging` and `api-sports-key`; prod uses the same names with `-prod`, except `api-sports-key`. All names are configurable in values.
+
+### 4.4 Redis
+
+Own StatefulSet (1 replica, `redis:7.4-alpine`, uid 999, read-only root filesystem), with `--save ""`, `--appendonly no`, `maxmemory 128mb` and `allkeys-lru`. It is a cache, so `/data` is an emptyDir by default (`persistence.enabled` adds a PVC). Clients use `redis://redis.plataforma.svc.cluster.local:6379/<db>`: DB 0 for prod, DB 1 for staging, so the two environments never share keys (D-16). It has no auth: NetworkPolicies (later task) must limit who reaches port 6379.
 | NetworkPolicy | per env | `default-deny-ingress` + allow ingress-nginx → web/api, api → predicciones, Prometheus → `/metrics` |
 | PodDisruptionBudget | per env | `minAvailable: 1` for web and api |
 
@@ -106,4 +147,4 @@ CronJob args: `["run", "basquetbol"]`, `["run", "americano"]`, `["run", "futbol"
 | Daily stop | `make destroy` (data is lost unless dumped: `pg_dump` through a client pod first) |
 | DB shell | `kubectl run psql --rm -it --image=postgres:16-alpine -- psql "$DATABASE_URL"` |
 | Rotate a secret | update it in Key Vault; the CSI driver re-syncs within 5 min; restart the Deployment |
-| Local cluster | `make k3d-up`, then `helm install` the chart with `values-local.yaml` (SL-53) |
+| Local cluster | `make k3d-up`, then `make k3d-deploy` (Redis and the chart with `values-k3d.yaml`); the README in `gitops/` has the full steps |

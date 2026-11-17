@@ -36,7 +36,7 @@ Rules for Terraform, Kubernetes manifests, scripts and workflows in this repo. I
 
 ## 2. Kubernetes manifests (Helm chart, SL-53)
 
-- One chart in `gitops/chart/`, values per environment (`values-staging.yaml`, `values-prod.yaml`, `values-local.yaml`). Environment differences live in values only.
+- Charts in `gitops/charts/`: `statline` (the environment chart) and `redis` (platform). Values per environment (`values-staging.yaml`, `values-prod.yaml`, `values-k3d.yaml`) live next to the chart. Environment differences live in values only. Argo CD manifests live in `gitops/argocd/`, cluster-wide platform objects in `gitops/plataforma/`.
 - **Labels:** `app.kubernetes.io/name`, `app.kubernetes.io/part-of: statline`, `app.kubernetes.io/component: web|api|predicciones|ingesta`, `app.kubernetes.io/version`. Selectors use only `app.kubernetes.io/name`.
 - **Every container:** `resources.requests` (cpu, memory) and `limits.memory`; liveness and readiness probes (not for CronJobs); `securityContext` with `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, `seccompProfile: RuntimeDefault`.
 - **Images by immutable tag** (short SHA or `vX.Y.Z`); never `latest`. `cd.yml` is the only writer of image tags.
