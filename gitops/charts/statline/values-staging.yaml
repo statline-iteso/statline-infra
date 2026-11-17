@@ -1,5 +1,6 @@
 # Environment: statline-staging, follows branch develop (Argo CD Application statline-staging).
 environment: staging
+
 ingress:
   # Placeholder: replace with the real domain before deploying.
   host: "staging.<dominio>"
@@ -7,8 +8,10 @@ ingress:
     enabled: true
     secretName: statline-tls
     clusterIssuer: letsencrypt-staging
+
 redis:
   dbIndex: 1
+
 secrets:
   csi:
     keyvaultName: kv-statline-REPLACE
@@ -20,6 +23,7 @@ secrets:
       JWT_REFRESH_SECRET: jwt-refresh-secret-staging
       API_SPORTS_KEY: api-sports-key
       BALLDONTLIE_API_KEY: balldontlie-api-key
+
 # Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
 web:
   image:
