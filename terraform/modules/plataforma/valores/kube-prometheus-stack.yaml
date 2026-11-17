@@ -1,0 +1,77 @@
+# kube-prometheus-stack trimmed for 2 x Standard_B2s (2 vCPU / 4 GiB each, shared with the apps).
+# Prometheus keeps 3 days in memory-backed emptyDir (no PVC, no disk cost; history is lost on
+# restart). Alertmanager is off. Components AKS does not expose (etcd, controller-manager,
+# scheduler, kube-proxy) are off so they do not show as down targets.
+defaultRules:
+  rules:
+    etcd: false
+    kubeControllerManager: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeProxy: false
+
+alertmanager:
+  enabled: false
+
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    retention: 3d
+    # No storageSpec: emptyDir.
+    scrapeInterval: 60s
+    evaluationInterval: 60s
+    # Pick up ServiceMonitors and PodMonitors from every namespace (the app ones in statline-*).
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 100m
+        memory: 400Mi
+      limits:
+        memory: 1Gi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 96Mi
+    limits:
+      memory: 256Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
+grafana:
+  enabled: true
+  # Password from random_password (module plataforma). Not persisted: no PVC, dashboards come
+  # from the chart's ConfigMaps on every start.
+  adminPassword: "${grafana_admin_password}"
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi

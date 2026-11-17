@@ -10,7 +10,17 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
-    # TODO(SL-12): kubernetes ~> 2.33 and helm ~> 2.16 for the plataforma module.
+    # Platform charts (module plataforma) and the namespaces, configured from module.aks in main.tf.
+    # Known caveat: the providers depend on a cluster created in this same stack. See README
+    # ("First apply") and `make apply-aks`.
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.33"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.16"
+    }
   }
 
   # Remote state in the bootstrap storage account, with blob-lease locking (SL-11).

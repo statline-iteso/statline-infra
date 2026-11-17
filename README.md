@@ -3,7 +3,7 @@
 Infrastructure for **StatLine**, a web platform for unified sports statistics and performance forecasts across three leagues: **NBA** (basketball), **NFL** (American football) and **Liga MX** (football). Scheduled jobs pull games and box scores from API-Sports, a REST API serves comparisons and standings, and a Python service produces match-outcome probabilities and player projections.
 
 This repo holds:
-- **Terraform** for every Azure resource: `bootstrap` (state storage) and `principal` (network, AKS, PostgreSQL, and *(planned)* Key Vault, Log Analytics, DNS and the platform Helm releases)
+- **Terraform** for every Azure resource: `bootstrap` (state storage) and `principal` (network, AKS, PostgreSQL, ingress IP, platform Helm releases, and *(planned)* Key Vault, Log Analytics; DNS when a domain is set)
 - the `make` targets that bootstrap state, plan and apply
 - a **k3d** setup for testing the Kubernetes manifests locally
 - *(planned)* the **GitOps** chart and Argo CD applications that deploy the four images
@@ -101,10 +101,24 @@ az account set --subscription "<Azure for Students>"
 make bootstrap                    # resource group + storage account for remote state (local state)
                                   # then writes terraform/principal/backend.hcl
 cp terraform/principal/terraform.tfvars.example terraform/principal/principal.auto.tfvars
-make plan                         # review: VNet, subnets, NSG, private DNS, AKS, PostgreSQL
+make apply-aks                    # step 1: only the AKS cluster (the kubernetes/helm providers need it)
+make plan                         # step 2: everything else (namespaces, ingress IP, platform charts)
 make apply                        # asks before applying
 az aks get-credentials -g rg-statline -n aks-statline
+terraform -chdir=terraform/principal output ingress_public_ip
+terraform -chdir=terraform/principal output -raw grafana_admin_password   # Grafana, user admin
 ```
+
+**Two-step first apply.** The `kubernetes` and `helm` providers read the cluster's kubeconfig from
+`module.aks`. On a cluster that does not exist yet those values are unknown, so a single
+`make plan` can fail on the providers. `make apply-aks` creates the cluster alone; after that every
+plan is normal. The same applies when the cluster is recreated from scratch (decision D-20).
+
+**Domain (optional).** Set `dominio` in `principal.auto.tfvars` when the team decides it. Then Terraform
+creates the DNS zone and the `@` and `staging` A records, and `terraform output dns_name_servers` lists
+the name servers to delegate at the registrar. Without `dominio` no zone is created.
+
+**Argo CD UI** (no public Ingress yet): `kubectl -n plataforma port-forward svc/argo-cd-argocd-server 8080:80`.
 
 > [!WARNING]
 > **Run `make destroy` when you are done for the day** unless the cluster must stay up. AKS nodes (2× Standard_B2s), the load balancer and PostgreSQL bill by the hour against the student credit. The bootstrap storage account stays; it costs cents.
