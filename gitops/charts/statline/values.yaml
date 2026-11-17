@@ -262,6 +262,10 @@ networkPolicies:
   kubeApiPorts:
     - 443
     - 6443
+  # Optional ingress allow from the node subnet (AKS snet-aks: 10.0.0.0/20), for kubelet probes. Empty
+  # (off) by default: Azure NPM and kube-router already allow node-to-local-pod traffic. Set it only
+  # if probes fail after enabling policies.
+  allowNodeCidr: ""
 
 # DEV ONLY (k3d). Ephemeral PostgreSQL in the release namespace. Off everywhere else.
 devPostgres:
