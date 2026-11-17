@@ -39,6 +39,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-19 | 2026-11-16 | Ingress public IP is a static Standard `azurerm_public_ip` in `rg-statline`, used by ingress-nginx through Azure annotations; the AKS identity gets Network Contributor on that resource group | Decided |
 | D-20 | 2026-11-16 | `kubernetes` (~> 2.33) and `helm` (~> 2.16) providers configured from `module.aks.kube_config` in the same stack; first apply creates the cluster alone (`make apply-aks`) | Decided |
 | D-21 | 2026-11-16 | Platform charts pinned: ingress-nginx 4.15.1, cert-manager v1.21.3, argo-cd 10.11.6, kube-prometheus-stack 92.16.0 (all released at least two weeks before the decision) | Decided |
+| D-21 | 2026-11-16 | Observability from the chart: ServiceMonitors for api and predicciones, PrometheusRule, Grafana dashboards as labelled ConfigMaps; ingesta health from kube-state-metrics, not a scrape | Decided |
 
 ## 2. Details
 
@@ -130,6 +131,8 @@ Versions are pinned in `terraform/modules/plataforma/variables.tf`. Values, in `
 - **ingress-nginx:** one replica, metrics and ServiceMonitor on (depends on kube-prometheus-stack), the static IP through the Azure annotations and `/healthz` as the health probe path.
 - **cert-manager:** CRDs installed by the chart, ServiceMonitor on.
 - **Argo CD:** one replica of each component, no Dex, no notifications, no HA Redis, `server.insecure` with no Ingress. Access by port-forward: `kubectl -n plataforma port-forward svc/argo-cd-argocd-server 8080:80`. **Limitation:** the UI is not public yet; an Ingress with TLS comes with the GitOps work (SL-53).
+### D-21 · Observability from the chart
+Scrape targets, alerts and dashboards are part of the environment chart, so they ship with the same Argo CD sync and values as everything else. `monitoring.enabled` gates them: k3d has no Prometheus Operator CRDs and stays off. **Ingesta is not scraped:** its CronJobs are short-lived and only `serve` mode exposes metrics, which no Deployment runs. Its health comes from kube-state-metrics (`kube_job_status_failed` joined to `kube_job_owner`, and `kube_cronjob_status_last_successful_time`). **Dashboards are per environment:** uids carry the environment and ConfigMap keys carry the namespace, so the Grafana sidecar, which watches all namespaces, does not overwrite one environment's dashboard with the other's. **Trade-off:** `serviceMonitorSelectorNilUsesHelmValues=false` is needed for the ServiceMonitors, but the PrometheusRule still needs the `release: kube-prometheus-stack` label. Failed-Job alerts clear only when the CronJob history removes the Job.
 
 ## 3. Known limitations
 
@@ -139,6 +142,7 @@ Versions are pinned in `terraform/modules/plataforma/variables.tf`. Values, in `
 - No WAF, no private AKS API server (cost and complexity).
 - Apps use the PostgreSQL admin login for both environments (D-16); per-app roles need the `postgresql` provider.
 - Key Vault has a public endpoint (D-18); private endpoints are out of budget scope.
+- The api has no `statline_cache_requests_total` metric yet (D-21): the cache panels show No data. The HPA panels show No data until the HPA exists (SL-55).
 
 ## 4. Future work
 

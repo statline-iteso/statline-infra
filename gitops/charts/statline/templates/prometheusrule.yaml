@@ -1,0 +1,82 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.alerts.enabled }}
+{{- $a := .Values.monitoring.alerts }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ printf "%s-alerts" .Release.Name | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "statline.labels" (dict "component" "alerts" "ctx" . "version" "") | nindent 4 }}
+    {{- with .Values.monitoring.ruleLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: statline-api
+      rules:
+        - alert: StatLineApiHighErrorRatio
+          expr: |
+            sum by (namespace) (rate(statline_http_requests_total{status=~"5.."}[5m]))
+              / sum by (namespace) (rate(statline_http_requests_total[5m]))
+              > {{ $a.api5xxRatio }}
+          for: 10m
+          labels:
+            severity: critical
+            part-of: statline
+          annotations:
+            summary: "api 5xx ratio above threshold in {{ "{{ $labels.namespace }}" }}"
+            description: "5xx share of api requests is {{ "{{ $value | humanizePercentage }}" }} (threshold {{ $a.api5xxRatio }})."
+        - alert: StatLineApiHighLatencyP95
+          expr: |
+            histogram_quantile(0.95, sum by (le, namespace) (rate(statline_http_request_duration_seconds_bucket[5m])))
+              > {{ $a.apiP95Seconds }}
+          for: 10m
+          labels:
+            severity: warning
+            part-of: statline
+          annotations:
+            summary: "api p95 latency above {{ $a.apiP95Seconds }}s in {{ "{{ $labels.namespace }}" }}"
+            description: "api p95 latency is {{ "{{ $value | humanizeDuration }}" }}."
+    - name: statline-predicciones
+      rules:
+        - alert: StatLinePrediccionesDown
+          expr: up{namespace=~"statline-.*", job=~".*-predicciones"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            part-of: statline
+          annotations:
+            summary: "predicciones target down in {{ "{{ $labels.namespace }}" }}"
+            description: "Prometheus cannot scrape predicciones /metrics for {{ "{{ $labels.job }}" }} (instance {{ "{{ $labels.instance }}" }})."
+    - name: statline-ingesta
+      rules:
+        # Failed Jobs owned by one of the three ingesta CronJobs. Failed Jobs stay until the
+        # CronJob's failedJobsHistoryLimit removes them, so this clears after cleanup or a successful rerun.
+        - alert: StatLineIngestaJobFailed
+          expr: |
+            (kube_job_status_failed{namespace=~"statline-.*"} > 0)
+              * on (namespace, job_name) group_left (owner_name)
+                kube_job_owner{namespace=~"statline-.*", owner_kind="CronJob", owner_name=~".*-ingesta-.*"}
+          for: 0m
+          labels:
+            severity: warning
+            part-of: statline
+          annotations:
+            summary: "ingesta Job failed: {{ "{{ $labels.job_name }}" }}"
+            description: "Job {{ "{{ $labels.job_name }}" }} of CronJob {{ "{{ $labels.owner_name }}" }} in {{ "{{ $labels.namespace }}" }} failed."
+        - alert: StatLineIngestaBasquetbolStale
+          expr: |
+            (time() - kube_cronjob_status_last_successful_time{namespace=~"statline-.*", cronjob=~".*-ingesta-basquetbol"} > {{ mul (int $a.ingestaStaleHours) 3600 }})
+            or
+            (
+              time() - kube_cronjob_created{namespace=~"statline-.*", cronjob=~".*-ingesta-basquetbol"} > {{ mul (int $a.ingestaStaleHours) 3600 }}
+              unless on (namespace, cronjob)
+                kube_cronjob_status_last_successful_time{namespace=~"statline-.*", cronjob=~".*-ingesta-basquetbol"}
+            )
+          for: 0m
+          labels:
+            severity: warning
+            part-of: statline
+          annotations:
+            summary: "no successful ingesta-basquetbol run in {{ $a.ingestaStaleHours }}h"
+            description: "CronJob {{ "{{ $labels.cronjob }}" }} in {{ "{{ $labels.namespace }}" }} has no successful run in the last {{ $a.ingestaStaleHours }} hours (or has never succeeded)."
+{{- end }}

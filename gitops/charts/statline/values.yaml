@@ -274,3 +274,30 @@ devPostgres:
   user: statline
   password: ""
   database: statline
+
+# Observability (SL-54): ServiceMonitors for api and predicciones, a PrometheusRule and Grafana
+# dashboards. Needs the Prometheus Operator CRDs (kube-prometheus-stack in plataforma), so it is
+# off by default: k3d has no CRDs. Staging and prod turn it on. Ingesta is not scraped (its
+# CronJobs are short-lived); its health comes from kube-state-metrics job and CronJob metrics.
+monitoring:
+  enabled: false
+  # Extra labels on every ServiceMonitor. Empty: plataforma sets serviceMonitorSelectorNilUsesHelmValues
+  # to false, so Prometheus picks up ServiceMonitors in every namespace without a label.
+  serviceMonitorLabels: {}
+  # Labels on the PrometheusRule. kube-prometheus-stack selects rules by label (its
+  # ruleSelectorNilUsesHelmValues defaults to true), so this must match the Helm release name.
+  ruleLabels:
+    release: kube-prometheus-stack
+  # Scrape interval for the api and predicciones /metrics endpoints.
+  interval: 30s
+  alerts:
+    enabled: true
+    # Fires when 5xx responses stay above this share of api requests for 10 minutes.
+    api5xxRatio: 0.05
+    # Fires when the api p95 latency stays above this many seconds for 10 minutes.
+    apiP95Seconds: 1
+    # Fires when no ingesta-basquetbol CronJob has succeeded for this many hours.
+    ingestaStaleHours: 36
+  dashboards:
+    # ConfigMaps labelled grafana_dashboard=1 from dashboards/*.json (the Grafana sidecar loads them).
+    enabled: true

@@ -148,6 +148,46 @@ Own StatefulSet (1 replica, `redis:7.4-alpine`, uid 999, read-only root filesyst
 
 The api Deployment has an **initContainer** that runs `prisma migrate deploy` with the same image (`node_modules/.bin/prisma migrate deploy`), so the schema is migrated before the new version serves traffic.
 
+### 4.5 Observability (SL-54)
+
+Rendered only when `monitoring.enabled` is true (staging and prod; k3d is off because it has no Prometheus Operator CRDs). kube-prometheus-stack in `plataforma` (Terraform, `valores/kube-prometheus-stack.yaml`) runs Prometheus, Grafana and kube-state-metrics; `serviceMonitorSelectorNilUsesHelmValues` is `false`, so it picks up ServiceMonitors in every namespace.
+
+| Object | Count per env | What |
+|---|---|---|
+| ServiceMonitor | 2 | `statline-api` and `statline-predicciones`: selects the Service, endpoint port `http` (named), path `/metrics`, interval `monitoring.interval` (30s). Extra labels: `monitoring.serviceMonitorLabels` |
+| PrometheusRule | 1 | `<release>-alerts`, labelled `release: kube-prometheus-stack` (its `ruleSelectorNilUsesHelmValues` default selects by that label). Gated by `monitoring.alerts.enabled` |
+| ConfigMap | 2 | `<release>-dashboard-api`, `<release>-dashboard-predicciones-ingesta`, from `gitops/charts/statline/dashboards/*.json` (`.Files.Get`), labelled `grafana_dashboard: "1"`. The Grafana sidecar watches all namespaces. Gated by `monitoring.dashboards.enabled` |
+
+**Metrics the apps expose** (backend `services/*/src`, names confirmed in code):
+
+| Source | Series | Labels |
+|---|---|---|
+| api | `statline_http_requests_total` | `method`, `route`, `status` |
+| api | `statline_http_request_duration_seconds` (histogram) | `method`, `route` (no status) |
+| predicciones | `statline_predicciones_requests_total` | `method`, `path`, `status` |
+| predicciones | `statline_predicciones_request_seconds` (histogram) | `method`, `path` |
+
+The api has no `statline_cache_requests_total` yet. The cache panels and nothing else depend on it; they show No data until the backend exposes it.
+
+**Ingesta is not scraped.** Its CronJobs are short-lived and only the `serve` mode exposes metrics, which no Deployment runs. Its health comes from kube-state-metrics: `kube_job_status_failed` joined with `kube_job_owner` (owner kind `CronJob`, name `*-ingesta-*`) and `kube_cronjob_status_last_successful_time`.
+
+**Alerts** (`PrometheusRule`; thresholds in `monitoring.alerts`):
+
+| Alert | Expression (summary) | For | Severity |
+|---|---|---|---|
+| `StatLineApiHighErrorRatio` | api 5xx / all requests > `api5xxRatio` (0.05) | 10m | critical |
+| `StatLineApiHighLatencyP95` | api p95 from the histogram > `apiP95Seconds` (1) | 10m | warning |
+| `StatLinePrediccionesDown` | `up == 0` for the predicciones target | 5m | critical |
+| `StatLineIngestaJobFailed` | a Job owned by an ingesta CronJob has failed | 0m | warning |
+| `StatLineIngestaBasquetbolStale` | no successful `ingesta-basquetbol` run in `ingestaStaleHours` (36), or the CronJob never succeeded | 0m | warning |
+
+**Dashboards** (Grafana, folder root; every dashboard has a `datasource` variable of type datasource and a `namespace` variable):
+
+- `StatLine · API`: requests per second, 5xx ratio, p95 latency, cache hit ratio (pending metric), request rate and 5xx ratio by route and status, p50/p95/p99, deployment replicas, HPA replicas (empty until SL-55), CPU as a share of request against the HPA target.
+- `StatLine · Predicciones e ingesta`: predicciones request rate, 5xx ratio, p95 latency and target up, requests and latency by path, failed ingesta Jobs, CronJob last successful run and time since, failed Jobs by CronJob.
+
+Dashboard uids are `statline-api-<env>` and `statline-pred-ingesta-<env>`, and the ConfigMap data keys start with the namespace, so staging and prod coexist in Grafana. Scraping `/metrics` is in-cluster only; the NetworkPolicy task (SL-55) must allow Prometheus to reach api and predicciones.
+
 ## 5. Contract with the backend images
 
 Source of truth: backend `docs/ARCHITECTURE.md §8`. Summary:

@@ -64,8 +64,9 @@ helm-lint: ## helm lint --strict: redis, and statline with each environment valu
 	helm lint --strict gitops/charts/redis
 	@for f in $(VALUES); do echo "helm lint statline -f $$f"; helm lint --strict gitops/charts/statline -f $$f; done
 
-helm-validate: ## helm template | kubeconform -strict for every chart and environment; also the Argo CD and plataforma manifests
+helm-validate: ## helm template | kubeconform -strict for every chart and environment (monitoring off and on); also the Argo CD and plataforma manifests
 	@for f in $(VALUES); do echo "validate statline $$f"; helm template statline gitops/charts/statline -f $$f | kubeconform $(KUBECONFORM_FLAGS); done
+	@for f in $(VALUES); do echo "validate statline $$f (monitoring on)"; helm template statline gitops/charts/statline -f $$f --set monitoring.enabled=true | kubeconform $(KUBECONFORM_FLAGS); done
 	helm template redis gitops/charts/redis | kubeconform $(KUBECONFORM_FLAGS)
 	kubeconform $(KUBECONFORM_FLAGS) gitops/argocd/project.yaml gitops/argocd/root.yaml gitops/argocd/apps/*.yaml gitops/plataforma/*.yaml
 

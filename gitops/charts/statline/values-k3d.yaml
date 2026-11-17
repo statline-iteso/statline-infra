@@ -21,6 +21,10 @@ networkPolicies:
   # Dev Postgres runs in the release namespace (devPostgres below); there is no Azure subnet.
   postgresCidr: ""
 
+# No Prometheus Operator CRDs in k3d.
+monitoring:
+  enabled: false
+
 redis:
   dbIndex: 1
 
