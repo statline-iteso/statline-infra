@@ -1,0 +1,79 @@
+{{- $c := "ingesta" -}}
+{{- $name := include "statline.fullname" (dict "component" $c "ctx" $) -}}
+{{- $labels := include "statline.labels" (dict "component" $c "ctx" $ "version" .Values.ingesta.image.tag) -}}
+{{- define "statline.ingesta.config" -}}
+TEMPORADA_BASQUETBOL: {{ .Values.ingesta.config.temporadaBasquetbol | quote }}
+TEMPORADA_AMERICANO: {{ .Values.ingesta.config.temporadaAmericano | quote }}
+TEMPORADA_FUTBOL: {{ .Values.ingesta.config.temporadaFutbol | quote }}
+API_SPORTS_DAILY_QUOTA: {{ .Values.ingesta.config.apiSportsDailyQuota | quote }}
+THESPORTSDB_API_KEY: {{ .Values.ingesta.config.thesportsdbApiKey | toString | quote }}
+FALLBACK_HABILITADO: {{ .Values.ingesta.config.fallbackHabilitado | toString | quote }}
+{{- end -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+automountServiceAccountToken: {{ .Values.ingesta.serviceAccount.automount }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+data:
+  {{- include "statline.ingesta.config" . | nindent 2 }}
+{{- range .Values.ingesta.jobs }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ printf "%s-%s" $name .name | trunc 52 | trimSuffix "-" }}
+  labels:
+    {{- $labels | nindent 4 }}
+    statline.io/job: {{ .name | quote }}
+spec:
+  schedule: {{ .schedule | quote }}
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: {{ $.Values.ingesta.cronjob.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ $.Values.ingesta.cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ $.Values.ingesta.cronjob.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ $.Values.ingesta.cronjob.backoffLimit }}
+      activeDeadlineSeconds: {{ $.Values.ingesta.cronjob.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- $labels | nindent 12 }}
+            statline.io/job: {{ .name | quote }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ $name }}
+          automountServiceAccountToken: {{ $.Values.ingesta.serviceAccount.automount }}
+          securityContext:
+            {{- include "statline.podSecurity" (dict "uid" $.Values.ingesta.runAsUser) | nindent 12 }}
+          containers:
+            - name: ingesta
+              image: {{ include "statline.image" (dict "component" $c "image" $.Values.ingesta.image "ctx" $) }}
+              imagePullPolicy: {{ $.Values.ingesta.image.pullPolicy }}
+              # Overrides the image CMD (serve); exit code != 0 marks the Job failed.
+              args: {{ toJson .args }}
+              envFrom:
+                - configMapRef:
+                    name: {{ $name }}
+              env:
+                {{- include "statline.secretEnv" (dict "keys" $.Values.ingesta.secretKeys "optional" $.Values.ingesta.optionalSecretKeys "secretName" $.Values.secrets.name) | nindent 16 }}
+              resources:
+                {{- toYaml $.Values.ingesta.resources | nindent 16 }}
+              securityContext:
+                {{- include "statline.containerSecurity" $ | nindent 16 }}
+              volumeMounts:
+                {{- include "statline.tmpVolumeMount" $ | nindent 16 }}
+                {{- include "statline.secretVolumeMount" $ | nindent 16 }}
+          volumes:
+            {{- include "statline.tmpVolume" $ | nindent 12 }}
+            {{- include "statline.secretVolume" $ | nindent 12 }}
+{{- end }}

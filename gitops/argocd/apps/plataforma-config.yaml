@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: plataforma-config
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: statline
+  source:
+    repoURL: https://github.com/statline-iteso/statline-infra.git
+    targetRevision: develop
+    path: gitops/plataforma
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: plataforma
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
