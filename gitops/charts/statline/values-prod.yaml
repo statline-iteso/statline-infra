@@ -29,9 +29,13 @@ web:
   image:
     tag: "0000000"
 api:
+  autoscaling:
+    enabled: true
   image:
     tag: "0000000"
 predicciones:
+  autoscaling:
+    enabled: true
   image:
     tag: "0000000"
 ingesta:

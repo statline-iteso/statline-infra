@@ -80,7 +80,15 @@ web:
 
 # Node API. Its initContainer runs prisma migrate deploy with the same image (D-12).
 api:
+  # Used only when autoscaling.enabled is false (the HPA owns the count otherwise).
   replicas: 2
+  # HorizontalPodAutoscaler (autoscaling/v2, D-21). Needs metrics-server; AKS and k3s ship it.
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    scaleDownStabilizationSeconds: 300
   port: 3000
   runAsUser: 1000
   image:
@@ -124,7 +132,14 @@ api:
 
 # Forecast service (FastAPI + scikit-learn). Model artifacts are cached in /tmp.
 predicciones:
+  # Used only when autoscaling.enabled is false.
   replicas: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 75
+    scaleDownStabilizationSeconds: 300
   port: 8000
   runAsUser: 10001
   image:
