@@ -16,7 +16,6 @@ controller:
     serviceMonitor:
       enabled: true
   service:
-    loadBalancerIP: "${ip_publica}"
     annotations:
       service.beta.kubernetes.io/azure-load-balancer-resource-group: "${grupo_recurso}"
       service.beta.kubernetes.io/azure-pip-name: "${nombre_ip}"

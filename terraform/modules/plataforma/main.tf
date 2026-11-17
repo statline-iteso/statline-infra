@@ -51,7 +51,6 @@ resource "helm_release" "ingress_nginx" {
   namespace  = kubernetes_namespace.ambiente["plataforma"].metadata[0].name
 
   values = [templatefile("${path.module}/valores/ingress-nginx.yaml", {
-    ip_publica    = var.ingress_public_ip_address
     nombre_ip     = var.ingress_public_ip_name
     grupo_recurso = var.resource_group_name
   })]

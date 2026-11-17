@@ -1,5 +1,5 @@
 # kube-prometheus-stack trimmed for 2 x Standard_B2s (2 vCPU / 4 GiB each, shared with the apps).
-# Prometheus keeps 3 days in memory-backed emptyDir (no PVC, no disk cost; history is lost on
+# Prometheus keeps 3 days in emptyDir (node disk) (no PVC, no disk cost; history is lost on
 # restart). Alertmanager is off. Components AKS does not expose (etcd, controller-manager,
 # scheduler, kube-proxy) are off so they do not show as down targets.
 defaultRules:
@@ -69,6 +69,13 @@ grafana:
   adminPassword: "${grafana_admin_password}"
   persistence:
     enabled: false
+  # Dashboards shipped as ConfigMaps labelled grafana_dashboard=1 in any namespace (app dashboards).
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
   resources:
     requests:
       cpu: 50m

@@ -1,8 +1,3 @@
-variable "ingress_public_ip_address" {
-  type        = string
-  description = "Static public IP address of the ingress load balancer (principal azurerm_public_ip.ingress)."
-}
-
 variable "ingress_public_ip_name" {
   type        = string
   description = "Name of the static public IP resource (service.beta.kubernetes.io/azure-pip-name)."

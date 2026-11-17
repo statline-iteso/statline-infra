@@ -100,9 +100,8 @@ resource "azurerm_role_assignment" "aks_ingress_pip" {
 module "plataforma" {
   source = "../modules/plataforma"
 
-  ingress_public_ip_address = azurerm_public_ip.ingress.ip_address
-  ingress_public_ip_name    = azurerm_public_ip.ingress.name
-  resource_group_name       = azurerm_resource_group.main.name
+  ingress_public_ip_name = azurerm_public_ip.ingress.name
+  resource_group_name    = azurerm_resource_group.main.name
 
   # The LB controller needs the role on the public IP resource group before it reconciles.
   depends_on = [azurerm_role_assignment.aks_ingress_pip]
