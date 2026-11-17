@@ -28,7 +28,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-13 | 2026-11-16 | k3d (k3s 1.30) for local clusters, Traefik disabled in favor of ingress-nginx | Decided |
 | D-14 | 2026-11-16 | Docs in English; course-delivery sections and domain names in Spanish | Decided |
 | D-15 | 2026-11-16 | `develop` is the default branch; `main` only receives `release/*` and `hotfix/*` | Decided |
-| D-21 | 2026-11-16 | App repos only build and push images and send `repository_dispatch`; this repo's `cd.yml` writes the tags with yq and pushes them with `GITHUB_TOKEN` (needs a branch-protection bypass for `github-actions[bot]`, see D-21 details) | Decided |
+| D-21 | 2026-11-16 | App repos only build and push images and send `repository_dispatch`; this repo's `cd.yml` writes the tags (awk, in place) and pushes them with `GITHUB_TOKEN` (needs a branch-protection bypass for `github-actions[bot]`, see D-21 details) | Decided |
 
 ## 2. Details
 

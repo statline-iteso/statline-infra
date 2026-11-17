@@ -6,7 +6,7 @@
 #   pairs-file: one "<image> <tag>" per line.
 #     image: web | api | predicciones | ingesta
 #     tag:   7 lowercase hex chars (short SHA) or vX.Y.Z (SemVer)
-# Prints the commit subject on stdout. Requires yq (mikefarah, v4) on PATH.
+# Prints the commit subject on stdout.
 set -euo pipefail
 
 if [[ $# -ne 3 ]]; then
@@ -39,8 +39,18 @@ while read -r image tag extra || [[ -n "${image:-}" ]]; do
     echo "invalid tag '$tag' for $image (7 hex chars or vX.Y.Z)" >&2
     exit 1
   fi
-  # Image names and tags are validated above, so they are safe to put in the yq expression.
-  yq -i ".${image}.image.tag = \"${tag}\"" "$values"
+  # yq -i would drop the blank lines of the file, so edit the one `tag:` line in place and
+  # keep it a quoted string. Image names and tags are validated above.
+  tmp=$(mktemp)
+  awk -v img="$image" -v tag="$tag" '
+    /^[A-Za-z]/ { top = ($0 ~ "^" img ":"); sub_in = 0 }
+    top && /^  image:/ { sub_in = 1 }
+    top && sub_in && /^    tag:/ { print "    tag: \"" tag "\""; done = 1; next }
+    { print }
+    END { exit done ? 0 : 3 }
+  ' "$values" > "$tmp" || { rm -f "$tmp"; echo "no $image.image.tag in $values" >&2; exit 1; }
+  cat "$tmp" > "$values"
+  rm -f "$tmp"
   images+=("$image")
   tags+=("$tag")
 done < "$pairs"
