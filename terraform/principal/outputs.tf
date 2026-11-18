@@ -23,10 +23,19 @@ output "postgres_fqdn" {
   value       = module.datos.server_fqdn
 }
 
-output "database_url" {
-  description = "DATABASE_URL; goes to Key Vault in module seguridad (SL-09)."
-  value       = module.datos.database_url
-  sensitive   = true
+output "key_vault_name" {
+  description = "Key Vault with the app secrets (database-url-<env>, jwt-secret-<env>, jwt-refresh-secret-<env>, api-sports-key)."
+  value       = module.seguridad.key_vault_name
+}
+
+output "key_vault_uri" {
+  description = "Key Vault URI (keyVaultName / vault URL for the SecretProviderClass, SL-58)."
+  value       = module.seguridad.key_vault_uri
+}
+
+output "tenant_id" {
+  description = "Entra tenant id for the SecretProviderClass (SL-58)."
+  value       = module.seguridad.tenant_id
 }
 
 output "log_analytics_workspace_id" {

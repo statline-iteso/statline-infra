@@ -59,9 +59,19 @@ module "datos" {
   depends_on = [module.red]
 }
 
+module "seguridad" {
+  source                 = "../modules/seguridad"
+  name                   = local.name
+  suffix                 = random_string.suffix.result
+  resource_group_name    = azurerm_resource_group.main.name
+  location               = var.location
+  csi_identity_object_id = module.aks.key_vault_csi_identity_object_id
+  database_urls          = module.datos.database_urls
+  tags                   = local.tags
+}
+
 # Log Analytics (log-statline) and diagnostic settings. AKS sends only the control-plane and
 # cheap categories: kube-audit is the expensive one and is left out (D-16).
-# Key Vault (module seguridad, SL-09) is not wired yet: add it here once both branches merge.
 module "observabilidad" {
   source              = "../modules/observabilidad"
   name                = local.name
@@ -85,14 +95,13 @@ module "observabilidad" {
     postgres = {
       resource_id = module.datos.server_id # allLogs group (low volume) + AllMetrics
     }
+    keyvault = {
+      resource_id = module.seguridad.key_vault_id # AuditEvent and policy logs + AllMetrics
+    }
   }
 }
 
 # ── Pending (second half, see docs/BACKLOG.md) ──────────────────────────────
-#
-# TODO(SL-09) module "seguridad": Key Vault (RBAC, purge protection), secrets DATABASE_URL
-#   (module.datos.database_url), JWT_SECRET, JWT_REFRESH_SECRET, API_SPORTS_KEY, and
-#   "Key Vault Secrets User" for module.aks.key_vault_csi_identity_object_id.
 #
 # TODO(SL-12) module "dns": dns_zone + A record to the ingress public_ip.
 #   module "plataforma": helm_release ingress-nginx, cert-manager, argo-cd,

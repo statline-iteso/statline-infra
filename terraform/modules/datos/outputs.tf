@@ -3,9 +3,9 @@ output "server_fqdn" {
   value       = azurerm_postgresql_flexible_server.main.fqdn
 }
 
-output "database_name" {
-  description = "Application database."
-  value       = azurerm_postgresql_flexible_server_database.statline.name
+output "database_names" {
+  description = "Application databases on the server (statline_<env>)."
+  value       = [for db in azurerm_postgresql_flexible_server_database.app : db.name]
 }
 
 output "admin_login" {
@@ -19,15 +19,18 @@ output "admin_password" {
   sensitive   = true
 }
 
-output "database_url" {
-  description = "DATABASE_URL for the api, ingesta and predicciones (stored in Key Vault)."
-  value = format(
-    "postgresql://%s:%s@%s:5432/%s?sslmode=require",
-    azurerm_postgresql_flexible_server.main.administrator_login,
-    random_password.admin.result,
-    azurerm_postgresql_flexible_server.main.fqdn,
-    azurerm_postgresql_flexible_server_database.statline.name,
-  )
+output "database_urls" {
+  description = "DATABASE_URL per environment (key = env, e.g. staging, prod), with the admin login and sslmode=require. Stored in Key Vault by module seguridad."
+  value = {
+    for name, db in azurerm_postgresql_flexible_server_database.app :
+    trimprefix(name, "statline_") => format(
+      "postgresql://%s:%s@%s:5432/%s?sslmode=require",
+      urlencode(azurerm_postgresql_flexible_server.main.administrator_login),
+      urlencode(random_password.admin.result),
+      azurerm_postgresql_flexible_server.main.fqdn,
+      db.name,
+    )
+  }
   sensitive = true
 }
 

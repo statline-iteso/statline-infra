@@ -45,10 +45,15 @@ variable "admin_login" {
   default     = "statlineadmin"
 }
 
-variable "database_name" {
-  type        = string
-  description = "Application database."
-  default     = "statline"
+variable "bases_de_datos" {
+  type        = list(string)
+  description = "One database per environment, named statline_<env>. The env is the suffix and keys database_urls."
+  default     = ["statline_staging", "statline_prod"]
+
+  validation {
+    condition     = length(var.bases_de_datos) > 0 && alltrue([for n in var.bases_de_datos : can(regex("^statline_[a-z]+$", n))])
+    error_message = "Each database must match statline_<env> (lowercase letters only)."
+  }
 }
 
 variable "tags" {
