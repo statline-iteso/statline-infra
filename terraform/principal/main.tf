@@ -60,7 +60,9 @@ module "aks" {
   node_vm_size        = var.node_vm_size
   node_min_count      = 2
   node_max_count      = 4
-  tags                = local.tags
+  # Container Insights (oms_agent) sends to the workspace of module observabilidad.
+  log_analytics_workspace_id = module.observabilidad.log_analytics_workspace_id
+  tags                       = local.tags
 }
 
 module "datos" {
@@ -74,6 +76,48 @@ module "datos" {
   tags                = local.tags
 
   depends_on = [module.red]
+}
+
+module "seguridad" {
+  source                 = "../modules/seguridad"
+  name                   = local.name
+  suffix                 = random_string.suffix.result
+  resource_group_name    = azurerm_resource_group.main.name
+  location               = var.location
+  csi_identity_object_id = module.aks.key_vault_csi_identity_object_id
+  database_urls          = module.datos.database_urls
+  tags                   = local.tags
+}
+
+# Log Analytics (log-statline) and diagnostic settings. AKS sends only the control-plane and
+# cheap categories: kube-audit is the expensive one and is left out (D-16).
+module "observabilidad" {
+  source              = "../modules/observabilidad"
+  name                = local.name
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  daily_quota_gb      = var.log_analytics_daily_quota_gb
+  tags                = local.tags
+
+  recursos_diagnostico = {
+    aks = {
+      resource_id = module.aks.cluster_id
+      log_categories = [
+        "kube-apiserver",
+        "kube-controller-manager",
+        "kube-scheduler",
+        "cluster-autoscaler",
+        "guard",
+      ]
+      metrics = true
+    }
+    postgres = {
+      resource_id = module.datos.server_id # allLogs group (low volume) + AllMetrics
+    }
+    keyvault = {
+      resource_id = module.seguridad.key_vault_id # AuditEvent and policy logs + AllMetrics
+    }
+  }
 }
 
 # Static public IP for the ingress-nginx load balancer. It lives in rg-statline (not in the
@@ -118,12 +162,3 @@ module "dns" {
   ingress_public_ip   = azurerm_public_ip.ingress.ip_address
   tags                = local.tags
 }
-
-# ── Pending (second half, see docs/BACKLOG.md) ──────────────────────────────
-#
-# TODO(SL-09) module "seguridad": Key Vault (RBAC, purge protection), secrets DATABASE_URL
-#   (module.datos.database_url), JWT_SECRET, JWT_REFRESH_SECRET, API_SPORTS_KEY, and
-#   "Key Vault Secrets User" for module.aks.key_vault_csi_identity_object_id.
-#
-# TODO(SL-10) module "observabilidad": log_analytics_workspace + diagnostic_settings for AKS,
-#   PostgreSQL and Key Vault; then wire oms_agent in module aks.

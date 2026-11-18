@@ -12,7 +12,7 @@ Back to the [roadmap](README.md).
 
 ## Next (in order)
 
-1. **SL-09 seguridad** — Key Vault and the four secrets; the database URL already comes from `module.datos.database_url`.
+1. ~~**SL-09 seguridad**~~ — done: Key Vault and the secrets (`database-url-<env>` from `module.datos.database_urls`, JWT, API-Sports key).
 2. **SL-12 dns + plataforma** — add the `kubernetes`/`helm` providers using `module.aks.kube_config`; five helm releases into `plataforma`.
 3. **SL-53 gitops** — chart, values, Argo CD Applications, `cd.yml`. Follow ARCHITECTURE §4–5.
 4. **SL-58, SL-55, SL-56** — SecretProviderClass, HPA, NetworkPolicies + PDBs.
