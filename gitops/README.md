@@ -74,7 +74,7 @@ The synced Secret exists only while a pod mounts the CSI volume. Every pod that 
 
 ## Not here yet
 
-HPA, NetworkPolicies, PodDisruptionBudgets and smoke-test hooks are separate tasks. Add them as new templates under `charts/statline/templates/` gated by their own values section.
+HPA, PodDisruptionBudgets and NetworkPolicies are built (SL-55, SL-56; see `docs/DECISIONS.md` D-21 and `docs/ARCHITECTURE.md` 5.1). Smoke-test hooks are a separate task. Add them as new templates under `charts/statline/templates/`, gated by their own values section. Smoke-test pods can reach web and api by carrying the label `statline.io/smoke: "true"`.
 
 ## Monitoring
 

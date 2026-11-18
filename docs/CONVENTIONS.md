@@ -24,7 +24,7 @@ Rules for Terraform, Kubernetes manifests, scripts and workflows in this repo. I
 - Real values in `*.auto.tfvars` (gitignored); `terraform.tfvars.example` committed.
 
 ### 1.5 Safety and cost
-- `prevent_destroy` on the state storage account and the `statline` database.
+- `prevent_destroy` on the state storage account and on the application databases (`statline_<env>`).
 - Burstable SKUs only (validated). New billable resources need a decision entry with their monthly cost.
 - NSG rules have a `description`; no inbound `*` except 80/443 to the ingress.
 - Encryption in transit on (`min_tls_version`, `require_secure_transport`).

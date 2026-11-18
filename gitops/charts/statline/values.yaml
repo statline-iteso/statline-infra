@@ -62,6 +62,10 @@ ingress:
 # Static SPA served by nginx-unprivileged.
 web:
   replicas: 2
+  # PodDisruptionBudget (D-21). minAvailable 1 is safe here because replicas is 2.
+  pdb:
+    enabled: true
+    minAvailable: 1
   port: 8080
   runAsUser: 101
   image:
@@ -80,7 +84,19 @@ web:
 
 # Node API. Its initContainer runs prisma migrate deploy with the same image (D-12).
 api:
+  # Used only when autoscaling.enabled is false (the HPA owns the count otherwise).
   replicas: 2
+  # HorizontalPodAutoscaler (autoscaling/v2, D-21). Needs metrics-server; AKS and k3s ship it.
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    scaleDownStabilizationSeconds: 300
+  # PodDisruptionBudget: minAvailable 1 with replicas >= 2 (set pdb.enabled false in single-replica environments).
+  pdb:
+    enabled: true
+    minAvailable: 1
   port: 3000
   runAsUser: 1000
   image:
@@ -124,7 +140,19 @@ api:
 
 # Forecast service (FastAPI + scikit-learn). Model artifacts are cached in /tmp.
 predicciones:
+  # Used only when autoscaling.enabled is false.
   replicas: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 75
+    scaleDownStabilizationSeconds: 300
+  # PodDisruptionBudget: maxUnavailable 1, NOT minAvailable 1. The workload may run with a single
+  # replica, and minAvailable 1 there blocks node drains. See docs/DECISIONS.md D-21.
+  pdb:
+    enabled: true
+    maxUnavailable: 1
   port: 8000
   runAsUser: 10001
   image:
@@ -195,6 +223,49 @@ ingesta:
       memory: 256Mi
     limits:
       memory: 512Mi
+
+# NetworkPolicies (D-21). Default-deny ingress and egress for the namespace, then one allow policy
+# per flow (matrix: docs/ARCHITECTURE.md section 5.1). The selectors are labels of the peers, so
+# they change with the cluster: check them against the ingress-nginx and Prometheus installs.
+networkPolicies:
+  enabled: false
+  # Namespace labels of kube-system (CoreDNS): DNS egress for every pod.
+  dnsNamespaceLabels:
+    kubernetes.io/metadata.name: kube-system
+  # Who may reach web (80 public traffic) and api (/api and /metrics paths share a port).
+  ingressController:
+    namespaceLabels:
+      kubernetes.io/metadata.name: plataforma
+    podLabels:
+      app.kubernetes.io/name: ingress-nginx
+  prometheus:
+    namespaceLabels:
+      kubernetes.io/metadata.name: plataforma
+    podLabels:
+      app.kubernetes.io/name: prometheus
+  # Pods labelled statline.io/smoke: "true" (Argo CD PostSync smoke tests, SL-57) may reach web and api.
+  smokeTest:
+    enabled: true
+  # Extra NetworkPolicy peers allowed to web and api (raw peer objects). Hook for other branches.
+  extraIngressFrom: []
+  # Redis in plataforma (chart gitops/charts/redis). Only api uses it.
+  redis:
+    namespaceLabels:
+      kubernetes.io/metadata.name: plataforma
+    podLabels:
+      app.kubernetes.io/name: redis
+  # CIDR of the PostgreSQL delegated subnet snet-postgres (D-06). Empty when no external PostgreSQL.
+  postgresCidr: "10.0.16.0/24"
+  # Kubernetes API address, as /32. Required when api.ingestaLanzador is kubernetes. No default:
+  # the AKS API server is public, so the address comes from the cluster (kubectl get endpoints kubernetes).
+  kubeApiCidr: ""
+  kubeApiPorts:
+    - 443
+    - 6443
+  # Optional ingress allow from the node subnet (AKS snet-aks: 10.0.0.0/20), for kubelet probes. Empty
+  # (off) by default: Azure NPM and kube-router already allow node-to-local-pod traffic. Set it only
+  # if probes fail after enabling policies.
+  allowNodeCidr: ""
 
 # DEV ONLY (k3d). Ephemeral PostgreSQL in the release namespace. Off everywhere else.
 devPostgres:

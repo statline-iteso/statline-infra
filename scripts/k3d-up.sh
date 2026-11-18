@@ -18,4 +18,8 @@ helm upgrade --install ingress-nginx ingress-nginx \
 for ns in plataforma statline-staging statline-prod; do
   kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
 done
+
+# Terraform labels the statline namespaces in AKS; the redis NetworkPolicy selects on this key (D-21).
+kubectl label namespace statline-staging statline.io/ambiente=staging --overwrite
+kubectl label namespace statline-prod statline.io/ambiente=prod --overwrite
 kubectl get nodes

@@ -29,8 +29,11 @@ resource "azurerm_postgresql_flexible_server" "main" {
   }
 }
 
-resource "azurerm_postgresql_flexible_server_database" "statline" {
-  name      = var.database_name
+# One database per environment on the same server (D-16). Never applied before SL-09, so the
+# former single `statline` database is simply replaced.
+resource "azurerm_postgresql_flexible_server_database" "app" {
+  for_each  = toset(var.bases_de_datos)
+  name      = each.value
   server_id = azurerm_postgresql_flexible_server.main.id
   charset   = "UTF8"
   collation = "en_US.utf8"

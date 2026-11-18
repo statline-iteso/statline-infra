@@ -61,7 +61,14 @@ resource "azurerm_kubernetes_cluster" "main" {
     secret_rotation_interval = "5m"
   }
 
-  # TODO(SL-10): oms_agent { log_analytics_workspace_id = … } once the observabilidad module exists.
+  # Container Insights: the agent ships logs and metrics to the workspace of module observabilidad.
+  dynamic "oms_agent" {
+    for_each = var.log_analytics_workspace_id == null ? [] : [var.log_analytics_workspace_id]
+    content {
+      log_analytics_workspace_id      = oms_agent.value
+      msi_auth_for_monitoring_enabled = true
+    }
+  }
 
   tags = var.tags
 
