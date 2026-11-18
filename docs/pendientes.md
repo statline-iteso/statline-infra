@@ -8,10 +8,10 @@ Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** 
 
 | # | Pendiente | Issue | Pts |
 |---|---|---|---|
-| 1 | Módulo `seguridad`: Key Vault con RBAC, secretos (`database-url`, `jwt-secret`, `jwt-refresh-secret`, `api-sports-key`) y rol *Key Vault Secrets User* para la identidad del CSI add-on (ya expuesta como output `key_vault_csi_identity_object_id`) | SL-09 | 5 |
+| 1 | Módulo `seguridad`: Key Vault con RBAC, secretos (`database-url-<env>`, `jwt-secret-<env>`, `jwt-refresh-secret-<env>`, `api-sports-key`) y rol *Key Vault Secrets User* para la identidad del CSI add-on (ya expuesta como output `key_vault_csi_identity_object_id`) | SL-09 | 5 |
 | 2 | Módulo `observabilidad`: Log Analytics + diagnostic settings; conectar `oms_agent` en el módulo `aks` (hay un TODO) | SL-10 | 3 |
 | 3 | Módulos `dns` y `plataforma`: zona DNS, IP pública del ingress y los cinco `helm_release` (ingress-nginx, cert-manager, argo-cd, kube-prometheus-stack, redis). Agregar los proveedores `kubernetes` y `helm` en `principal/versions.tf` | SL-12 | 6 |
-| 4 | `gitops/`: chart Helm (Deployments web/api/predicciones, Services, Ingress, ConfigMaps, los 3 CronJob con sus horarios), `values-staging.yaml`, `values-prod.yaml`, Applications de Argo CD; `cd.yml` en los repos de app (push a Docker Hub + actualizar la etiqueta aquí). El contrato de imágenes está en [ARCHITECTURE §5](ARCHITECTURE.md#5-contract-with-the-backend-images) | SL-53 | 7 |
+| 4 | `gitops/`: chart Helm (Deployments web/api/predicciones, Services, Ingress, ConfigMaps, los 3 CronJob con sus horarios), `values-staging.yaml`, `values-prod.yaml`, Applications de Argo CD; en `cd.yml` de los repos de app (que ya publica en Docker Hub) falta el paso que actualiza la etiqueta aquí. El contrato de imágenes está en [ARCHITECTURE §5](ARCHITECTURE.md#5-contract-with-the-backend-images) | SL-53 | 7 |
 | 5 | ServiceMonitors y dashboards de Grafana | SL-54 | 5 |
 | 6 | HPA de api (2–6, 70 % CPU) y predicciones (1–4, 75 % CPU) | SL-55 | 3 |
 | 7 | NetworkPolicies default-deny y PDBs | SL-56 | 4 |
@@ -51,9 +51,10 @@ Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** 
 ## Configuración que falta en GitHub y Azure
 
 - **Secrets de CI (infra):** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (app registration con credencial federada para GitHub OIDC) y `TFSTATE_RESOURCE_GROUP`, `TFSTATE_STORAGE_ACCOUNT` (salen de `make bootstrap`). Sin ellos el job `plan` se salta.
-- **Secrets de CD (app repos `statline-backend` y `statline-frontend`):** `DOCKERHUB_USERNAME` y `DOCKERHUB_TOKEN` (push a Docker Hub) e `INFRA_DISPATCH_TOKEN`, un PAT fino con `contents: write` sobre `statline-infra` (solo para el `repository_dispatch`).
+- **Secrets de CD (app repos `statline-backend` y `statline-frontend`):** `DOCKERHUB_USERNAME` y `DOCKERHUB_TOKEN` (push a Docker Hub) e `INFRA_DISPATCH_TOKEN`, un PAT fino con `contents: write` sobre `statline-infra` (solo para el `repository_dispatch`). Sin ellos `cd.yml` termina sin publicar.
 - **Permiso de escritura del bot en infra:** `cd.yml` de infra hace `git push` con `GITHUB_TOKEN` a `develop` (staging) y `main` (prod). Las ramas protegidas deben permitir a `github-actions[bot]` hacer push (Settings → Rulesets → bypass), o cambiar el paso de push por un PR con auto-merge (ver DECISIONS D-21). Sin esto el workflow falla en el push.
 - **Docker Hub:** crear los repositorios `statline/web`, `statline/api`, `statline/predicciones` y `statline/ingesta` y el token de acceso antes de la primera ejecución de `cd.yml`.
+- **Auto-merge:** `auto-merge.yml` aprueba y hace squash merge de los PRs de Ian hacia `develop` cuando el CI requerido pasa. Requiere activar *Allow GitHub Actions to create and approve pull requests* en la organización y en cada repo (Settings → Actions → General).
 - **AKS 1.30:** confirmar con `az aks get-versions -l eastus2` que se puede crear; si no, usar la versión soportada más antigua y registrarlo en DECISIONS.
 
 ## Riesgos y plan B

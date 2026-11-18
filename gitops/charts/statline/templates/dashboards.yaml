@@ -1,0 +1,20 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.dashboards.enabled }}
+{{- /*
+One ConfigMap per dashboards/*.json file, labelled for the Grafana sidecar (any namespace).
+The data key is namespace-prefixed so the sidecar does not overwrite a dashboard of another
+environment. __ENV__ in the JSON becomes the environment name (uids differ per environment).
+*/}}
+{{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-dashboard-%s" $.Release.Name (base $path | trimSuffix ".json") | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "statline.labels" (dict "component" "dashboards" "ctx" $ "version" "") | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  {{ printf "%s-%s" $.Release.Namespace (base $path) }}: |
+{{ $.Files.Get $path | replace "__ENV__" $.Values.environment | indent 4 }}
+{{- end }}
+{{- end }}
