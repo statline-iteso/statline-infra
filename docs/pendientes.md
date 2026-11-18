@@ -11,7 +11,7 @@ Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** 
 | 1 | Módulo `seguridad`: Key Vault con RBAC, secretos (`database-url`, `jwt-secret`, `jwt-refresh-secret`, `api-sports-key`) y rol *Key Vault Secrets User* para la identidad del CSI add-on (ya expuesta como output `key_vault_csi_identity_object_id`) | SL-09 | 5 |
 | 2 | Módulo `observabilidad`: Log Analytics + diagnostic settings; conectar `oms_agent` en el módulo `aks` (hay un TODO) | SL-10 | 3 |
 | 3 | Módulos `dns` y `plataforma`: zona DNS, IP pública del ingress y los cinco `helm_release` (ingress-nginx, cert-manager, argo-cd, kube-prometheus-stack, redis). Agregar los proveedores `kubernetes` y `helm` en `principal/versions.tf` | SL-12 | 6 |
-| 4 | `gitops/`: chart Helm (Deployments web/api/predicciones, Services, Ingress, ConfigMaps, los 3 CronJob con sus horarios), `values-staging.yaml`, `values-prod.yaml`, Applications de Argo CD; `cd.yml` en los repos de app (push a Docker Hub + actualizar la etiqueta aquí). El contrato de imágenes está en [ARCHITECTURE §5](ARCHITECTURE.md#5-contract-with-the-backend-images) | SL-53 | 7 |
+| 4 | `gitops/`: chart Helm (Deployments web/api/predicciones, Services, Ingress, ConfigMaps, los 3 CronJob con sus horarios), `values-staging.yaml`, `values-prod.yaml`, Applications de Argo CD; en `cd.yml` de los repos de app (que ya publica en Docker Hub) falta el paso que actualiza la etiqueta aquí. El contrato de imágenes está en [ARCHITECTURE §5](ARCHITECTURE.md#5-contract-with-the-backend-images) | SL-53 | 7 |
 | 5 | ServiceMonitors y dashboards de Grafana | SL-54 | 5 |
 | 6 | HPA de api (2–6, 70 % CPU) y predicciones (1–4, 75 % CPU) | SL-55 | 3 |
 | 7 | NetworkPolicies default-deny y PDBs | SL-56 | 4 |
@@ -51,7 +51,8 @@ Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** 
 ## Configuración que falta en GitHub y Azure
 
 - **Secrets de CI (infra):** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (app registration con credencial federada para GitHub OIDC) y `TFSTATE_RESOURCE_GROUP`, `TFSTATE_STORAGE_ACCOUNT` (salen de `make bootstrap`). Sin ellos el job `plan` se salta.
-- **Secrets de CD (app repos):** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` y un token para disparar `repository_dispatch` en infra.
+- **Secrets de CD (app repos):** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (y la variable opcional `DOCKERHUB_NAMESPACE`, por defecto `statline`) y un token para disparar `repository_dispatch` en infra. Sin ellos `cd.yml` termina sin publicar.
+- **Auto-merge:** `auto-merge.yml` aprueba y hace squash merge de los PRs de Ian hacia `develop` cuando el CI requerido pasa. Requiere activar *Allow GitHub Actions to create and approve pull requests* en la organización y en cada repo (Settings → Actions → General).
 - **AKS 1.30:** confirmar con `az aks get-versions -l eastus2` que se puede crear; si no, usar la versión soportada más antigua y registrarlo en DECISIONS.
 
 ## Riesgos y plan B
