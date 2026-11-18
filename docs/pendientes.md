@@ -55,9 +55,10 @@ Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** 
 ## Configuración que falta en GitHub y Azure
 
 - **Secrets de CI (infra):** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (app registration con credencial federada para GitHub OIDC) y `TFSTATE_RESOURCE_GROUP`, `TFSTATE_STORAGE_ACCOUNT` (salen de `make bootstrap`). Sin ellos el job `plan` se salta.
-- **Secrets de CD (app repos `statline-backend` y `statline-frontend`):** `DOCKERHUB_USERNAME` y `DOCKERHUB_TOKEN` (push a Docker Hub) e `INFRA_DISPATCH_TOKEN`, un PAT fino con `contents: write` sobre `statline-infra` (solo para el `repository_dispatch`).
+- **Secrets de CD (app repos `statline-backend` y `statline-frontend`):** `DOCKERHUB_USERNAME` y `DOCKERHUB_TOKEN` (push a Docker Hub) e `INFRA_DISPATCH_TOKEN`, un PAT fino con `contents: write` sobre `statline-infra` (solo para el `repository_dispatch`). Sin ellos `cd.yml` termina sin publicar.
 - **Permiso de escritura del bot en infra:** `cd.yml` de infra hace `git push` con `GITHUB_TOKEN` a `develop` (staging) y `main` (prod). Las ramas protegidas deben permitir a `github-actions[bot]` hacer push (Settings → Rulesets → bypass), o cambiar el paso de push por un PR con auto-merge (ver DECISIONS D-36). Sin esto el workflow falla en el push.
 - **Docker Hub:** crear los repositorios `statline/web`, `statline/api`, `statline/predicciones` y `statline/ingesta` y el token de acceso antes de la primera ejecución de `cd.yml`.
+- **Auto-merge:** `auto-merge.yml` aprueba y hace squash merge de los PRs de Ian hacia `develop` cuando el CI requerido pasa. Requiere activar *Allow GitHub Actions to create and approve pull requests* en la organización y en cada repo (Settings → Actions → General).
 - **AKS 1.30:** confirmar con `az aks get-versions -l eastus2` que se puede crear; si no, usar la versión soportada más antigua y registrarlo en DECISIONS.
 
 ## Riesgos y plan B
