@@ -41,7 +41,9 @@ module "aks" {
   node_vm_size        = var.node_vm_size
   node_min_count      = 2
   node_max_count      = 4
-  tags                = local.tags
+  # Container Insights (oms_agent) sends to the workspace of module observabilidad.
+  log_analytics_workspace_id = module.observabilidad.log_analytics_workspace_id
+  tags                       = local.tags
 }
 
 module "datos" {
@@ -68,10 +70,38 @@ module "seguridad" {
   tags                   = local.tags
 }
 
+# Log Analytics (log-statline) and diagnostic settings. AKS sends only the control-plane and
+# cheap categories: kube-audit is the expensive one and is left out (D-16).
+module "observabilidad" {
+  source              = "../modules/observabilidad"
+  name                = local.name
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+  daily_quota_gb      = var.log_analytics_daily_quota_gb
+  tags                = local.tags
+
+  recursos_diagnostico = {
+    aks = {
+      resource_id = module.aks.cluster_id
+      log_categories = [
+        "kube-apiserver",
+        "kube-controller-manager",
+        "kube-scheduler",
+        "cluster-autoscaler",
+        "guard",
+      ]
+      metrics = true
+    }
+    postgres = {
+      resource_id = module.datos.server_id # allLogs group (low volume) + AllMetrics
+    }
+    keyvault = {
+      resource_id = module.seguridad.key_vault_id # AuditEvent and policy logs + AllMetrics
+    }
+  }
+}
+
 # ── Pending (second half, see docs/BACKLOG.md) ──────────────────────────────
-#
-# TODO(SL-10) module "observabilidad": log_analytics_workspace + diagnostic_settings for AKS,
-#   PostgreSQL and Key Vault; then wire oms_agent in module aks.
 #
 # TODO(SL-12) module "dns": dns_zone + A record to the ingress public_ip.
 #   module "plataforma": helm_release ingress-nginx, cert-manager, argo-cd,

@@ -12,3 +12,8 @@ output "tenant_id" {
   description = "Entra tenant id (tenantId in the SecretProviderClass)."
   value       = data.azurerm_client_config.current.tenant_id
 }
+
+output "key_vault_id" {
+  description = "Key Vault resource id (diagnostic settings in module observabilidad)."
+  value       = azurerm_key_vault.main.id
+}

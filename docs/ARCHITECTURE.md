@@ -61,6 +61,16 @@ Names are fixed; the SecretProviderClass (SL-58) and the backend read them by th
 | `api-sports-key` | `API_SPORTS_KEY` | no (one quota for all envs) | placeholder `set-me`, set out of band; Terraform ignores later changes |
 
 The Kubernetes Secret `statline-secrets` maps these to the env names the images expect (§5).
+| `aks` | done | `id-statline-aks` (user-assigned) with *Network Contributor* on `snet-aks` · `aks-statline` 1.30, node pool `system` 2→4 × Standard_B2s, Azure CNI, Azure network policy, service CIDR 10.1.0.0/16, OIDC issuer, workload identity, Key Vault Secrets Store CSI add-on (rotation 5 min), `oms_agent` (Container Insights, MSI auth) to `log-statline` |
+| `datos` | done | `psql-statline-<5>` PostgreSQL 16 `B_Standard_B1ms`, 32 GiB auto-grow, 7-day backups, private access only, `require_secure_transport=on` · database `statline` (`prevent_destroy`) · admin password from `random_password` |
+| `seguridad` | planned (SL-09) | `kv-statline-<5>` (RBAC, purge protection, network ACLs) · secrets `database-url`, `jwt-secret`, `jwt-refresh-secret`, `api-sports-key` · *Key Vault Secrets User* for the CSI add-on identity |
+| `observabilidad` | done (SL-10) | `log-statline` Log Analytics, PerGB2018, 30 days retention, daily cap 0.5 GB (`log_analytics_daily_quota_gb`) · one `azurerm_monitor_diagnostic_setting` per entry of `recursos_diagnostico` (`diag-aks`, `diag-postgres`), destination *Dedicated* tables. AKS: `kube-apiserver`, `kube-controller-manager`, `kube-scheduler`, `cluster-autoscaler`, `guard` + AllMetrics. PostgreSQL: `allLogs` group + AllMetrics. Key Vault: pending, see below |
+| `dns` | planned (SL-12) | `dns_zone` · `public_ip` for the ingress (in the node resource group) · A record |
+| `plataforma` | planned (SL-12) | `helm_release`: ingress-nginx, cert-manager, argo-cd, kube-prometheus-stack, redis (Bitnami) — all in `plataforma` |
+
+Outputs other repos or the chart rely on: `aks_cluster_name`, `resource_group_name`, `key_vault_csi_identity_client_id`, `postgres_fqdn`, `database_url` (sensitive), `log_analytics_workspace_id`, `log_analytics_workspace_name`. Renaming one is a contract change.
+
+**Key Vault diagnostics (pending):** the `seguridad` module (SL-09) is on a parallel branch. Once both merge, add `kv = { resource_id = module.seguridad.key_vault_id }` to `recursos_diagnostico` in `principal/main.tf` (module observabilidad, SL-10 follow-up). Until then Key Vault logs are not sent to Log Analytics.
 
 ### Why private access for PostgreSQL
 
