@@ -1,6 +1,6 @@
 apiVersion: v2
 name: redis
-description: Redis 7 cache for StatLine (single StatefulSet, namespace plataforma). Own chart instead of Bitnami, see docs/DECISIONS.md D-16.
+description: Redis 7 cache for StatLine (single StatefulSet, namespace plataforma). Own chart instead of Bitnami, see docs/DECISIONS.md D-26.
 type: application
 version: 0.1.0
 appVersion: "7.4"

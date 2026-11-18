@@ -1,6 +1,6 @@
 # plataforma: the namespaces of the cluster and the four platform charts (SL-12). Redis is not a
-# chart here: it is our own StatefulSet in the GitOps chart (DECISIONS D-16). ClusterIssuers are
-# not here either: they live in gitops/ and Argo CD applies them (DECISIONS D-18).
+# chart here: it is our own StatefulSet in the GitOps chart (DECISIONS D-20). ClusterIssuers are
+# not here either: they live in gitops/ and Argo CD applies them (DECISIONS D-22).
 
 locals {
   ambientes = {

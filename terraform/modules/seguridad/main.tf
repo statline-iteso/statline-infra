@@ -98,3 +98,19 @@ resource "azurerm_key_vault_secret" "api_sports_key" {
     ignore_changes = [value]
   }
 }
+
+# Placeholder like api-sports-key: the chart mounts BALLDONTLIE_API_KEY from this secret, so it must
+# exist or the CSI volume fails to mount. "set-me" is harmless while FALLBACK_HABILITADO is false
+# (the chart default); set the real key out of band before turning the fallback on.
+resource "azurerm_key_vault_secret" "balldontlie_api_key" {
+  name         = "balldontlie-api-key"
+  value        = "set-me"
+  key_vault_id = azurerm_key_vault.main.id
+  content_type = "text/plain"
+
+  depends_on = [azurerm_role_assignment.deployer_secrets_officer]
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}

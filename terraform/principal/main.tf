@@ -90,7 +90,7 @@ module "seguridad" {
 }
 
 # Log Analytics (log-statline) and diagnostic settings. AKS sends only the control-plane and
-# cheap categories: kube-audit is the expensive one and is left out (D-16).
+# cheap categories: kube-audit is the expensive one and is left out (D-19).
 module "observabilidad" {
   source              = "../modules/observabilidad"
   name                = local.name

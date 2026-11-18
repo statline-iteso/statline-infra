@@ -97,7 +97,7 @@ SMOKE_OVERRIDES = {"spec":{"automountServiceAccountToken":false,"securityContext
 smoke: ## In-cluster smoke checks: make smoke ENV=staging|prod [RELEASE=...] (k3d-* or aks-statline* contexts only)
 	@case "$(ENV)" in staging|prod) ;; *) echo "Set ENV=staging or ENV=prod"; exit 1;; esac
 	@ctx=$$(kubectl config current-context); case "$$ctx" in k3d-*|aks-statline*) ;; *) echo "Refusing: current context is '$$ctx', not k3d-* or aks-statline*"; exit 1;; esac
-	kubectl run statline-smoke --namespace statline-$(ENV) --rm -i --restart=Never --image=$(SMOKE_IMAGE) --labels=statline.io/smoke=true --overrides='$(SMOKE_OVERRIDES)' -- sh -s < gitops/charts/statline/files/smoke-test.sh
+	kubectl run statline-smoke --namespace statline-$(ENV) --rm -i --restart=Never --image=$(SMOKE_IMAGE) --labels=statline.io/smoke=true --override-type=strategic --overrides='$(SMOKE_OVERRIDES)' -- sh -s < gitops/charts/statline/files/smoke-test.sh
 
 diagram: ## Render docs/solucion.mmd → docs/solucion.png
 	npx -y @mermaid-js/mermaid-cli@11.4.0 -i docs/solucion.mmd -o docs/solucion.png -b white -w 1600

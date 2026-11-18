@@ -16,6 +16,10 @@ controller:
     serviceMonitor:
       enabled: true
   service:
+    # Local keeps the client source IP (no SNAT to a node), so X-Forwarded-For carries the real
+    # address and the api's per-IP rate limits work. The LB only sends traffic to nodes running a
+    # controller pod (checked through healthCheckNodePort).
+    externalTrafficPolicy: Local
     annotations:
       service.beta.kubernetes.io/azure-load-balancer-resource-group: "${grupo_recurso}"
       service.beta.kubernetes.io/azure-pip-name: "${nombre_ip}"

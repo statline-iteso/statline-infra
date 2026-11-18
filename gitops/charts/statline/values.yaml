@@ -62,7 +62,7 @@ ingress:
 # Static SPA served by nginx-unprivileged.
 web:
   replicas: 2
-  # PodDisruptionBudget (D-21). minAvailable 1 is safe here because replicas is 2.
+  # PodDisruptionBudget (D-31). minAvailable 1 is safe here because replicas is 2.
   pdb:
     enabled: true
     minAvailable: 1
@@ -86,7 +86,7 @@ web:
 api:
   # Used only when autoscaling.enabled is false (the HPA owns the count otherwise).
   replicas: 2
-  # HorizontalPodAutoscaler (autoscaling/v2, D-21). Needs metrics-server; AKS and k3s ship it.
+  # HorizontalPodAutoscaler (autoscaling/v2, D-31). Needs metrics-server; AKS and k3s ship it.
   autoscaling:
     enabled: false
     minReplicas: 2
@@ -149,7 +149,7 @@ predicciones:
     targetCPUUtilizationPercentage: 75
     scaleDownStabilizationSeconds: 300
   # PodDisruptionBudget: maxUnavailable 1, NOT minAvailable 1. The workload may run with a single
-  # replica, and minAvailable 1 there blocks node drains. See docs/DECISIONS.md D-21.
+  # replica, and minAvailable 1 there blocks node drains. See docs/DECISIONS.md D-31.
   pdb:
     enabled: true
     maxUnavailable: 1
@@ -224,7 +224,7 @@ ingesta:
     limits:
       memory: 512Mi
 
-# NetworkPolicies (D-21). Default-deny ingress and egress for the namespace, then one allow policy
+# NetworkPolicies (D-31). Default-deny ingress and egress for the namespace, then one allow policy
 # per flow (matrix: docs/ARCHITECTURE.md section 5.1). The selectors are labels of the peers, so
 # they change with the cluster: check them against the ingress-nginx and Prometheus installs.
 networkPolicies:

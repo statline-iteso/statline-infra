@@ -1,7 +1,7 @@
 {{- /*
 NetworkPolicies (networking.k8s.io/v1), gated by networkPolicies.enabled. Default-deny for every
 pod in the release namespace (ingress and egress), then one allow policy per flow. Each allow
-policy says who needs it. Matrix: docs/ARCHITECTURE.md section 5.1; decision: docs/DECISIONS.md D-21.
+policy says who needs it. Matrix: docs/ARCHITECTURE.md section 5.1; decision: docs/DECISIONS.md D-31.
 
 Helpers below render peers and rules shared by several policies.
 */ -}}
@@ -170,7 +170,7 @@ spec:
           port: {{ .Values.api.port }}
 ---
 # api egress: predicciones (forecasts), Redis in plataforma (cache), PostgreSQL (Prisma and
-# readiness), and the Kubernetes API only when ingestaLanzador is kubernetes (D-20).
+# readiness), and the Kubernetes API only when ingestaLanzador is kubernetes (D-30).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -192,7 +192,7 @@ spec:
     {{- include "statline.netpol.redisEgress" . | nindent 4 }}
     {{- include "statline.netpol.dbEgress" . | nindent 4 }}
     {{- if eq $lanzador "kubernetes" }}
-    # Kubernetes API for the on-demand ingestion Jobs (D-20). Address comes from values.
+    # Kubernetes API for the on-demand ingestion Jobs (D-30). Address comes from values.
     - to:
         - ipBlock:
             cidr: {{ .Values.networkPolicies.kubeApiCidr | quote }}
