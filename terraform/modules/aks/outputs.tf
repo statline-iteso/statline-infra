@@ -18,6 +18,11 @@ output "oidc_issuer_url" {
   value       = azurerm_kubernetes_cluster.main.oidc_issuer_url
 }
 
+output "identity_principal_id" {
+  description = "Principal id of the control-plane identity (granted Network Contributor on the ingress public IP resource group in principal)."
+  value       = azurerm_user_assigned_identity.aks.principal_id
+}
+
 output "kubelet_object_id" {
   description = "Kubelet identity object id."
   value       = azurerm_kubernetes_cluster.main.kubelet_identity[0].object_id
