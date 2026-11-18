@@ -267,6 +267,30 @@ networkPolicies:
   # if probes fail after enabling policies.
   allowNodeCidr: ""
 
+# Post-deploy smoke tests (templates/smoke-test.yaml). A Job that runs after every sync: an Argo CD
+# PostSync hook, and a Helm post-install/post-upgrade hook for `helm upgrade --install` (k3d).
+# If it fails, the sync is marked failed but nothing is rolled back: see docs/RUNBOOK.md.
+smokeTests:
+  enabled: true
+  image:
+    repository: curlimages/curl
+    # Pinned. curl runs as uid 100 in this image.
+    tag: "8.11.1"
+    pullPolicy: IfNotPresent
+  runAsUser: 100
+  runAsGroup: 101
+  # Each check retries `attempts` times, `intervalSeconds` apart. The Job is killed after activeDeadlineSeconds.
+  attempts: 10
+  intervalSeconds: 6
+  activeDeadlineSeconds: 180
+  ttlSecondsAfterFinished: 3600
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      memory: 32Mi
+
 # DEV ONLY (k3d). Ephemeral PostgreSQL in the release namespace. Off everywhere else.
 devPostgres:
   enabled: false
