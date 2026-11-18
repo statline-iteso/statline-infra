@@ -73,7 +73,10 @@ metadata:
   labels:
     {{- $labels | nindent 4 }}
 spec:
+  {{- if not .Values.api.autoscaling.enabled }}
+  # The HPA owns the count when enabled (hpa.yaml): spec.replicas is then omitted.
   replicas: {{ .Values.api.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "statline.selectorLabels" (dict "component" $c) | nindent 6 }}

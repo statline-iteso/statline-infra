@@ -11,6 +11,16 @@ ingress:
   tls:
     enabled: false
 
+# Single replicas: a minAvailable 1 PDB on web and api would block node drains, so PDBs are off here.
+networkPolicies:
+  enabled: true
+  # k3d-up.sh installs ingress-nginx into its own namespace, not plataforma.
+  ingressController:
+    namespaceLabels:
+      kubernetes.io/metadata.name: ingress-nginx
+  # Dev Postgres runs in the release namespace (devPostgres below); there is no Azure subnet.
+  postgresCidr: ""
+
 redis:
   dbIndex: 1
 
@@ -34,12 +44,18 @@ devPostgres:
 # Local images built with tag `local` (see gitops/README.md).
 web:
   replicas: 1
+  pdb:
+    enabled: false
   image:
     repository: statline/web
     tag: local
     pullPolicy: Never
 api:
   replicas: 1
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
   image:
     repository: statline/api
     tag: local

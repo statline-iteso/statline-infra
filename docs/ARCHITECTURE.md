@@ -80,7 +80,7 @@ Outputs other repos or the chart rely on: `aks_cluster_name`, `resource_group_na
 
 With a delegated subnet the server has no public endpoint, so the proposal's "firewall rules" are replaced by the network boundary: only the VNet (AKS pods) can reach it. Admin access for humans goes through `kubectl run` with a `postgres:16` client pod or `kubectl port-forward` to a pod (D-06).
 
-## 4. Cluster layout (SL-53 chart, SL-58 values; HPA, NetworkPolicy and PDB are later tasks)
+## 4. Cluster layout (SL-53 chart, SL-58 values, SL-55 HPA, SL-56 NetworkPolicy and PDB)
 
 ### 4.1 Chart layout
 
@@ -119,7 +119,9 @@ Naming and labels: objects are named `<release>-<component>` (release `statline-
 | ServiceAccount | 1 per workload | `automountServiceAccountToken: false` (a values switch per component) |
 | ConfigMap | 1 for api, predicciones, ingesta | non-secret settings. Web has no env, so it has no ConfigMap. Changes roll the pods through a `checksum/config` annotation |
 | SecretProviderClass or Secret | 1 per env | see 4.3 |
-| HPA | 2 per env | api 2–6 at 70 % CPU; predicciones 1–4 at 75 % CPU. **Later task** |
+| HPA | 2 per env (staging, prod) | `autoscaling/v2`. api 2–6 at 70 % CPU; predicciones 1–4 at 75 % CPU; scale-down stabilization 300 s. When enabled, the Deployment omits `spec.replicas`. Needs metrics-server (AKS and k3s have it). Disabled in k3d |
+| PodDisruptionBudget | 3 per env | web and api `minAvailable: 1`; predicciones `maxUnavailable: 1` (D-21). Disabled for web and api in k3d (single replica) |
+| NetworkPolicy | ~10 per env | default-deny ingress and egress, then one allow policy per flow (5.1). Enabled in staging, prod and k3d |
 
 ### 4.3 Secret mapping
 
@@ -142,9 +144,7 @@ Key Vault object names (`secrets.csi.objects`): staging uses `database-url-stagi
 
 ### 4.4 Redis
 
-Own StatefulSet (1 replica, `redis:7.4-alpine`, uid 999, read-only root filesystem), with `--save ""`, `--appendonly no`, `maxmemory 128mb` and `allkeys-lru`. It is a cache, so `/data` is an emptyDir by default (`persistence.enabled` adds a PVC). Clients use `redis://redis.plataforma.svc.cluster.local:6379/<db>`: DB 0 for prod, DB 1 for staging, so the two environments never share keys (D-16). It has no auth: NetworkPolicies (later task) must limit who reaches port 6379.
-| NetworkPolicy | per env | `default-deny-ingress` + allow ingress-nginx → web/api, api → predicciones, Prometheus → `/metrics` |
-| PodDisruptionBudget | per env | `minAvailable: 1` for web and api |
+Own StatefulSet (1 replica, `redis:7.4-alpine`, uid 999, read-only root filesystem), with `--save ""`, `--appendonly no`, `maxmemory 128mb` and `allkeys-lru`. It is a cache, so `/data` is an emptyDir by default (`persistence.enabled` adds a PVC). Clients use `redis://redis.plataforma.svc.cluster.local:6379/<db>`: DB 0 for prod, DB 1 for staging, so the two environments never share keys (D-16). It has no auth, so its own NetworkPolicy (chart `gitops/charts/redis`) accepts port 6379 only from api pods in namespaces labelled `statline.io/ambiente` (Terraform sets the label on the statline namespaces; `make k3d-up` sets it locally). Redis gets no PodDisruptionBudget: it is one cache replica, and eviction costs only cache misses.
 
 The api Deployment has an **initContainer** that runs `prisma migrate deploy` with the same image (`node_modules/.bin/prisma migrate deploy`), so the schema is migrated before the new version serves traffic.
 
@@ -162,6 +162,31 @@ Source of truth: backend `docs/ARCHITECTURE.md §8`. Summary:
 `/readyz` of the api also checks Redis when `REDIS_URL` is set. The api trusts one proxy hop (ingress-nginx, `trust proxy` = 1). With `api.ingestaLanzador: kubernetes` the chart mounts the ServiceAccount token and renders a Role (`get` on `cronjobs`, `create` on `jobs`, group `batch`) and RoleBinding in the release namespace; otherwise none of that is rendered (D-20).
 
 CronJob args: `["run", "basquetbol"]`, `["run", "americano"]`, `["run", "futbol"]`. Exit code ≠ 0 marks the Job failed. All images run as non-root and work with `readOnlyRootFilesystem` (ingesta and predicciones need an `emptyDir` on `/tmp`).
+
+### 5.1 Network flows (NetworkPolicy matrix, SL-56)
+
+Every pod in a release namespace starts with `default-deny` (ingress and egress). Each row below is an allow rule; "DNS" (UDP and TCP 53 to kube-system) is allowed for all pods. Ports are the container ports. Values keys are in `networkPolicies.*` (chart `values.yaml`).
+
+| From → To | Port | Selector (values) | Why |
+|---|---|---|---|
+| ingress-nginx → web | 8080 | `ingressController` (plataforma, `app.kubernetes.io/name: ingress-nginx`) | public SPA traffic |
+| ingress-nginx → api | 3000 | `ingressController` | `/api` traffic |
+| Prometheus → api | 3000 | `prometheus` (plataforma, `app.kubernetes.io/name: prometheus`) | `/metrics`. NetworkPolicy filters by port, not path, so Prometheus reaches every api port |
+| smoke pods → web, api | 8080, 3000 | label `statline.io/smoke: "true"` (`smokeTest.enabled`) | Argo CD PostSync smoke tests (SL-57) |
+| extra peers → web, api | per rule | `extraIngressFrom` | hook for other branches |
+| api → predicciones | 8000 | same namespace | forecasts |
+| api → Redis | 6379 | `redis` (plataforma, `app.kubernetes.io/name: redis`) | cache |
+| api → PostgreSQL | 5432 | `postgresCidr` (10.0.16.0/24, `snet-postgres`) | Prisma, readiness |
+| api → Kubernetes API | `kubeApiPorts` (443, 6443) | `kubeApiCidr`, **required** when `api.ingestaLanzador: kubernetes` | on-demand ingestion Jobs (D-20) |
+| predicciones ← api | 8000 | same namespace | forecasts |
+| predicciones ← Prometheus | 8000 | `prometheus` | metrics |
+| predicciones → PostgreSQL | 5432 | `postgresCidr` | models and data |
+| ingesta → PostgreSQL | 5432 | `postgresCidr` | ingestion |
+| ingesta → internet | 443 | `0.0.0.0/0` except 10/8, 172.16/12, 192.168/16 | API-Sports, balldontlie, TheSportsDB |
+| api, predicciones, ingesta → dev Postgres | 5432 | pod labels (k3d only, `devPostgres.enabled`) | local database |
+| Redis ← api | 6379 | namespace label `statline.io/ambiente` AND `app.kubernetes.io/name: statline-api` (redis chart) | cache; egress from Redis is denied |
+
+Nothing else is allowed: web has no egress beyond DNS, ingesta has no ingress, and no pod reaches another namespace except the plataforma peers above.
 
 ## 6. CI/CD and GitOps
 
