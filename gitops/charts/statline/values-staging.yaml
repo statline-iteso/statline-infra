@@ -47,3 +47,6 @@ ingesta:
     fallbackHabilitado: "false"
   image:
     tag: "0000000"
+
+monitoring:
+  enabled: true

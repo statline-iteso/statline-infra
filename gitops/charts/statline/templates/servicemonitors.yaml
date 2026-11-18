@@ -1,0 +1,23 @@
+{{- if .Values.monitoring.enabled }}
+{{- /* Scrapes the named Service port "http" (/metrics) of api and predicciones. Ingesta is not scraped. */}}
+{{- range $c := list "api" "predicciones" }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "statline.fullname" (dict "component" $c "ctx" $) }}
+  labels:
+    {{- include "statline.labels" (dict "component" $c "ctx" $ "version" (index $.Values $c).image.tag) | nindent 4 }}
+    {{- with $.Values.monitoring.serviceMonitorLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" $c) | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ $.Values.monitoring.interval | quote }}
+{{- end }}
+{{- end }}
