@@ -8,7 +8,7 @@ Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** 
 
 | # | Pendiente | Issue | Pts |
 |---|---|---|---|
-| 1 | Módulo `seguridad`: Key Vault con RBAC, secretos (`database-url`, `jwt-secret`, `jwt-refresh-secret`, `api-sports-key`) y rol *Key Vault Secrets User* para la identidad del CSI add-on (ya expuesta como output `key_vault_csi_identity_object_id`) | SL-09 | 5 |
+| 1 | Módulo `seguridad`: Key Vault con RBAC, secretos (`database-url-<env>`, `jwt-secret-<env>`, `jwt-refresh-secret-<env>`, `api-sports-key`) y rol *Key Vault Secrets User* para la identidad del CSI add-on (ya expuesta como output `key_vault_csi_identity_object_id`) | SL-09 | 5 |
 | 2 | Módulo `observabilidad`: Log Analytics + diagnostic settings; conectar `oms_agent` en el módulo `aks` (hay un TODO) | SL-10 | 3 |
 | 3 | Módulos `dns` y `plataforma`: zona DNS, IP pública del ingress y los cinco `helm_release` (ingress-nginx, cert-manager, argo-cd, kube-prometheus-stack, redis). Agregar los proveedores `kubernetes` y `helm` en `principal/versions.tf` | SL-12 | 6 |
 | 4 | `gitops/`: chart Helm (Deployments web/api/predicciones, Services, Ingress, ConfigMaps, los 3 CronJob con sus horarios), `values-staging.yaml`, `values-prod.yaml`, Applications de Argo CD; en `cd.yml` de los repos de app (que ya publica en Docker Hub) falta el paso que actualiza la etiqueta aquí. El contrato de imágenes está en [ARCHITECTURE §5](ARCHITECTURE.md#5-contract-with-the-backend-images) | SL-53 | 7 |
