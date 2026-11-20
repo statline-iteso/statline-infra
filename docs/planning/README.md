@@ -19,11 +19,11 @@ ITESO final project, Fall 2026: **Juan Pablo** (backend, frontend, foundations) 
 |---|---|---|---|
 | S0 | 1 | Repos, devcontainers, linters, k3d, JSON Schemas | ✅ Done |
 | S1 | 2–3 | Terraform: bootstrap, red, aks, datos, remote state | ✅ Done (Argo CD moves to S5 with the chart) |
-| S2 | 4–5 | Prisma schema (tables + JSONB), NBA ingestion end to end | ✅ Done · Key Vault, Log Analytics, DNS/plataforma pending |
+| S2 | 4–5 | Prisma schema (tables + JSONB), NBA ingestion end to end | ✅ Done |
 | S3 | 6–7 | API core, JWT auth, CI in the three repos, Trivy gate | ✅ Done |
-| S4 | 8–9 | Models in FastAPI, React views, NFL and Liga MX | 🟡 Front base views done; models, adapters, comparison pending |
-| S5 | 10–11 | GitOps + Argo CD, Prometheus/Grafana, HPA, resilience | ⏳ Next |
-| S6 | 12 | Quality pass, smoke tests, delivery and defense | ⏳ |
+| S4 | 8–9 | Models in FastAPI, React views, NFL and Liga MX | ✅ Done |
+| S5 | 10–11 | GitOps + Argo CD, Prometheus/Grafana, HPA, resilience | ✅ Done |
+| S6 | 12 | Quality pass, smoke tests, delivery and defense | 🟡 Smoke tests done; deploy evidence (SL-60) and release v1.0.0 (SL-61) pending |
 
 ## Dependencies between repos
 

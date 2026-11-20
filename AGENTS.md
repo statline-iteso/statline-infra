@@ -77,7 +77,7 @@ make diagram               # docs/solucion.mmd → docs/solucion.png
 ```
 statline-infra/
 ├── AGENTS.md · CLAUDE.md · README.md · Makefile · mise.toml
-├── docs/                    ARCHITECTURE · CONVENTIONS · DECISIONS · BACKLOG · modelo-datos · api · pendientes · planning/
+├── docs/                    ARCHITECTURE · CONVENTIONS · DECISIONS · BACKLOG · RUNBOOK · modelo-datos · api · pendientes · planning/
 ├── terraform/
 │   ├── bootstrap/           state storage account (local state, run once)
 │   ├── principal/           the environment: calls the modules below
@@ -85,14 +85,14 @@ statline-infra/
 │       ├── red/             VNet, subnets, NSG, private DNS zone            (done)
 │       ├── aks/             cluster, identity, CSI add-on                   (done)
 │       ├── datos/           PostgreSQL Flexible Server                      (done)
-│       ├── seguridad/       Key Vault, secrets, access                      (SL-09)
-│       ├── observabilidad/  Log Analytics, diagnostic settings              (SL-10)
-│       ├── dns/             DNS zone, A record to the ingress IP            (SL-12)
-│       └── plataforma/      namespaces, four helm_release                    (SL-12)
-├── gitops/                  (SL-53) Helm chart + values per environment + Argo CD Applications
+│       ├── seguridad/       Key Vault, secrets, access                      (done)
+│       ├── observabilidad/  Log Analytics, diagnostic settings              (done)
+│       ├── dns/             DNS zone, A record to the ingress IP            (done)
+│       └── plataforma/      namespaces, four helm_release                   (done)
+├── gitops/                  Helm charts (statline, redis) + values per environment + Argo CD Applications
 ├── k3d/                     local cluster config
-├── scripts/                 backend-config.sh · k3d-up.sh
-└── .github/workflows/       ci.yml · (SL-53) cd.yml
+├── scripts/                 backend-config.sh · k3d-up.sh · bump-image-tags.sh · smoke.sh
+└── .github/workflows/       ci.yml · cd.yml (tag bump PRs) · auto-merge.yml
 ```
 
 ## 8. Rules for agents
