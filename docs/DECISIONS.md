@@ -72,7 +72,7 @@ The proposal says `cd.yml` updates "el repositorio GitOps". Keeping `gitops/` in
 
 
 ### D-16 · One database per environment, admin login for apps
-`modules/datos` creates `statline_staging` and `statline_prod` on the same server (`for_each` over `bases_de_datos`, both `prevent_destroy`). Output `database_urls` is a sensitive map keyed by env, and each URL uses `sslmode=require`. The former single `statline` database was replaced before anything was applied (Azure was never provisioned), so there is no state to migrate.
+`modules/datos` creates `statline_staging` and `statline_prod` on the same server (`for_each` over `bases_de_datos`). They are **not** `prevent_destroy`: Terraform refuses any destroy plan that includes a protected resource, which would block the `make destroy` that ends every session, and the server they live on was never protected anyway. Data survives a destroy only through a dump (RUNBOOK). Output `database_urls` is a sensitive map keyed by env, and each URL uses `sslmode=require`. The former single `statline` database was replaced before anything was applied (Azure was never provisioned), so there is no state to migrate.
 
 The apps connect with the server administrator login. **Limitation:** the same superuser credentials reach both databases, so an app bug in staging could read prod. Per-app roles with least privilege would need the `postgresql` provider (roles and grants managed by Terraform) and are left as future work. Prisma needs DDL rights for its migrations, which is another reason to keep the admin login for now.
 
