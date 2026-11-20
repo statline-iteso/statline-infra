@@ -1,10 +1,10 @@
-# App of apps. Bootstrap once: kubectl apply -f gitops/argocd/project.yaml -f gitops/argocd/root.yaml
+# App of apps, in plataforma next to Argo CD (Terraform installs it there). Bootstrap once: kubectl apply -f gitops/argocd/project.yaml -f gitops/argocd/root.yaml
 # It then manages every Application in gitops/argocd/apps/.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: root
-  namespace: argocd
+  namespace: plataforma
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
@@ -15,7 +15,7 @@ spec:
     path: gitops/argocd/apps
   destination:
     server: https://kubernetes.default.svc
-    namespace: argocd
+    namespace: plataforma
   syncPolicy:
     automated:
       prune: true
