@@ -613,7 +613,7 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 **Acceptance criteria**
 
 - [ ] Capturas de AKS, Argo CD, Grafana y pruebas de humo
-- [ ] Runbook de alta y baja del ambiente
+- [x] Runbook de alta y baja del ambiente ([RUNBOOK.md](RUNBOOK.md), secciones 1–3 y 8)
 
 ### ⏳ [SL-61](https://github.com/statline-iteso/statline-infra/issues/20) · Entrega final y defensa del proyecto
 
