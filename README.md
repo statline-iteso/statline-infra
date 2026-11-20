@@ -26,13 +26,13 @@ Cada mañana el CronJob `ingesta-basquetbol` consulta API-Sports, normaliza los 
 
 ![Diagrama de la solución](docs/solucion.png)
 
-Verde: implementado. Gris punteado: pendiente para la segunda mitad. Fuente editable en [`docs/solucion.mmd`](docs/solucion.mmd) (`make diagram`).
+Verde: implementado (aún sin aplicar en Azure). Línea punteada: opcional o respaldo. Fuente editable en [`docs/solucion.mmd`](docs/solucion.mmd) (`make diagram`).
 
 ### Repositorios
 
 | Repo | Contiene |
 |---|---|
-| [statline-infra](https://github.com/statline-iteso/statline-infra) (este) | Terraform, k3d, *(pendiente)* chart GitOps y Argo CD, documentación del proyecto |
+| [statline-infra](https://github.com/statline-iteso/statline-infra) (este) | Terraform, k3d, chart GitOps y aplicaciones de Argo CD, documentación del proyecto |
 | [statline-backend](https://github.com/statline-iteso/statline-backend) | `api` (Node 20 + Express + Prisma), `ingesta` y `predicciones` (Python 3.12), JSON Schemas, sus `Dockerfile` |
 | [statline-frontend](https://github.com/statline-iteso/statline-frontend) | SPA en React 18 + Vite + Tailwind que consume la API |
 
@@ -49,7 +49,7 @@ Verde: implementado. Gris punteado: pendiente para la segunda mitad. Fuente edit
 
 ### Avance
 
-32 de 61 issues (144 de 277 puntos) están terminados: cimientos, los módulos de Terraform `bootstrap`, `red`, `aks` y `datos`, la ingesta de NBA de punta a punta, la API con autenticación y el catálogo, el esqueleto de predicciones, las vistas base del frontend y el CI de los tres repos. El resto está en [docs/pendientes.md](docs/pendientes.md), cada punto con su issue.
+59 de 61 issues (269 de 277 puntos) están terminados. La primera mitad dejó los cimientos, los módulos de Terraform `bootstrap`, `red`, `aks` y `datos`, la ingesta de NBA, la API con autenticación y el catálogo, y las vistas base del frontend. La segunda mitad agregó Key Vault, Log Analytics, DNS y la plataforma; el chart con Argo CD, Redis, HPA, NetworkPolicies, PDB, monitoreo y pruebas de humo; NFL, Liga MX y los respaldos; el resto de la API; los modelos de predicción; y las vistas de boxscore, comparación, pronósticos, listas y alertas. Faltan SL-60 (desplegar y juntar evidencia) y SL-61 (release y defensa), en [docs/pendientes.md](docs/pendientes.md).
 
 ### Cómo correrlo
 
