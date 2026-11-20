@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: plataforma-config
-  namespace: argocd
+  namespace: plataforma
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:

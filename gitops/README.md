@@ -35,7 +35,7 @@ helm template statline gitops/charts/statline -f gitops/charts/statline/values-s
 
 ## How Argo CD picks things up
 
-1. Bootstrap once (in the cluster, Argo CD already installed in `argocd`):
+1. Bootstrap once. Terraform (`modules/plataforma`) installs Argo CD in `plataforma`, so the AppProject and every Application live there too:
    ```bash
    kubectl apply -f gitops/argocd/project.yaml -f gitops/argocd/root.yaml
    ```
