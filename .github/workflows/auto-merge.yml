@@ -39,3 +39,6 @@ jobs:
       # --match-head-commit: only the commit that CI just validated can be merged.
       - name: Squash-merge
         run: gh pr merge "$PR" --squash --delete-branch --match-head-commit "$SHA"
+      # Merges made with GITHUB_TOKEN don't fire push events, so start CI on develop explicitly.
+      - name: Start CI on develop
+        run: gh workflow run ci.yml --ref develop

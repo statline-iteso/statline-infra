@@ -9,6 +9,8 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+  # auto-merge.yml starts this run on develop after each merge (GITHUB_TOKEN merges fire no push).
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
