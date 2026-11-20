@@ -43,7 +43,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-33 | 2026-11-16 | Post-deploy smoke tests: a Job as Argo CD PostSync hook, also a Helm post-install/post-upgrade hook (k3d) | Decided |
 | D-34 | 2026-11-16 | No automatic rollback: rollback is a `git revert` of the image-tag bump; `argocd app rollback` only as a temporary stopgap | Decided |
 | D-35 | 2026-11-16 | Argo CD sync retry limit 2 (was 5) in staging and prod, so a failing smoke hook is not re-run six times | Decided |
-| D-36 | 2026-11-16 | App repos only build and push images and send `repository_dispatch`; this repo's `cd.yml` writes the tags (awk, in place) and pushes them with `GITHUB_TOKEN` (needs a branch-protection bypass for `github-actions[bot]`, see D-36 details) | Decided |
+| D-36 | 2026-11-19 | App repos only build and push images and send `repository_dispatch`; this repo's `cd.yml` writes the tags (awk, in place) on one rolling `gitops/bump-<env>` branch and opens a PR (staging: auto-merged when CI passes; prod: manual review). Branch protection is not relaxed | Decided |
 
 ## 2. Details
 
@@ -171,14 +171,16 @@ Argo CD's automated sync does not roll back when a hook fails, and `argocd app r
 ### D-35 · Sync retry limit 2
 The Applications had `retry.limit: 5` with backoff up to 5 min. A failing PostSync hook makes each retry re-run the whole sync and the smoke Job (up to 180 s each), so a broken release would be retested six times while the bad pods keep serving. Staging and prod now use `limit: 2`. The platform Applications (redis, plataforma-config) keep 5.
 
-### D-36 · Tag bumps pushed by the bot, not by a PR
+### D-36 · Tag bumps through a PR, not a bot push
 
-The app repos send the new tags with `repository_dispatch` and this repo commits them, so each deploy is one commit on `develop` or `main`. Two ways to satisfy the branch protection rules (no direct pushes):
+The app repos send the new tags with `repository_dispatch`, and `cd.yml` here writes them into `values-<env>.yaml`. The branch protection rules (PR, approval, CI) stay as they are for the bot too:
 
-1. **Implemented:** allow `github-actions[bot]` to push to `develop` and `main` in the branch protection rules. Simple, but the bot bypasses the PR review for tag bumps only; nothing else is relaxed.
-2. **Alternative:** open a PR with the bump and enable auto-merge (`gh pr merge --auto --squash`). Keeps protections intact, needs a `contents: write` + `pull-requests: write` token and auto-merge enabled on the repo; the Argo CD sync waits for the merge.
+- **One rolling branch per environment**, `gitops/bump-staging` → `develop` and `gitops/bump-prod` → `main`. Each run rebases the branch on its target, adds one commit, and pushes with `--force-with-lease`, retrying up to 5 times if either branch moved. Two dispatches close together (backend and frontend) end up in the same PR instead of racing.
+- **Token:** pushes and PRs made with `GITHUB_TOKEN` start no workflows, so CI would never run on the PR. The branch is pushed and the PR opened with `GITOPS_PR_TOKEN`, a fine-grained PAT with `contents: write` and `pull-requests: write` on this repo only. Without it the run fails with an error instead of silently not deploying.
+- **Staging** PRs are approved and squash-merged by `auto-merge.yml` once the required CI passes, only if they come from `gitops/bump-staging` in this repo and change nothing but `values-staging.yaml` (checked on the exact head commit it merges).
+- **Prod** PRs into `main` wait for a manual review, like every release.
 
-If option 1 is not available, switch the `Bump tags` step to option 2.
+**Rejected:** a branch-protection bypass for `github-actions[bot]`. It is simpler but lets the bot push to `main` with no review and no CI. **Cost:** a deploy waits for one CI run (a few minutes) after the images are pushed. **Rollback** is unchanged: revert the bump PR's squash commit (D-34).
 
 
 ## 3. Known limitations

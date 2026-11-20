@@ -1,7 +1,8 @@
 name: Auto-merge
 
 # PRs opened by Pardosito into develop are approved and squash-merged automatically once every
-# required CI check passes on the exact head commit. Nothing from the PR is checked out or run here,
+# required CI check passes on the exact head commit. So are the staging tag-bump PRs that cd.yml
+# opens from gitops/bump-staging, but only when they change nothing but values-staging.yaml (D-36). Nothing from the PR is checked out or run here,
 # so pull_request_target is safe. Releases into main still go through a manual review.
 
 on:
@@ -21,7 +22,11 @@ permissions:
 jobs:
   merge:
     name: approve and merge
-    if: github.event.pull_request.user.login == 'Pardosito' && !github.event.pull_request.draft
+    if: >-
+      !github.event.pull_request.draft &&
+      (github.event.pull_request.user.login == 'Pardosito' ||
+       (github.event.pull_request.head.ref == 'gitops/bump-staging' &&
+        github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -30,6 +35,16 @@ jobs:
       PR: ${{ github.event.pull_request.number }}
       SHA: ${{ github.event.pull_request.head.sha }}
     steps:
+      - name: Tag-bump PRs may only change the staging values file
+        if: github.event.pull_request.head.ref == 'gitops/bump-staging'
+        run: |
+          # The exact head commit that the merge step pins with --match-head-commit.
+          files=$(gh api "repos/$GH_REPO/compare/develop...$SHA" --jq '.files[].filename')
+          if [[ "$files" != "gitops/charts/statline/values-staging.yaml" ]]; then
+            echo "::error::gitops/bump-staging changes more than values-staging.yaml:"
+            echo "$files"
+            exit 1
+          fi
       - name: Approve
         run: gh pr review "$PR" --approve --body "Auto-approved; merges when CI is green."
       - name: Wait for required checks
