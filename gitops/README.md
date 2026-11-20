@@ -68,7 +68,9 @@ The dev Postgres is ephemeral: `make k3d-deploy` with a fresh cluster runs the a
 
 ## Secrets
 
-Staging and prod use `secrets.mode: csi`. The SecretProviderClass `statline-kv` syncs Key Vault into the Secret `statline-secrets`. Its keys are the env var names (`DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY`), and the Key Vault names are in `secrets.csi.objects`. k3d uses `secrets.mode: plain` with fake values. Never put a real value in a values file.
+Staging and prod use `secrets.mode: csi`. The SecretProviderClass `statline-kv` syncs Key Vault into the Secret `statline-secrets`. Its keys are the env var names (`DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY`, `SEED_ADMIN_PASSWORD`), and the Key Vault names are in `secrets.csi.objects`. k3d uses `secrets.mode: plain` with fake values. Never put a real value in a values file.
+
+`SEED_ADMIN_PASSWORD` reaches only the api `seed` initContainer, which creates the leagues and the first ADMIN after the migrations (D-37).
 
 The synced Secret exists only while a pod mounts the CSI volume. Every pod that reads it (including the api migrate initContainer and the CronJobs) mounts the volume; kubelet mounts volumes before it resolves container env, so there is no deadlock. `BALLDONTLIE_API_KEY` is `optional` in the pod spec, but its Key Vault object must exist. `api.ingestaLanzador: kubernetes` adds the Role and RoleBinding for on-demand ingestion Jobs; `ingesta.config.fallbackHabilitado` stays `"false"` in staging and prod.
 

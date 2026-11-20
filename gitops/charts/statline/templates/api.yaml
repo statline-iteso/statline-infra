@@ -121,6 +121,26 @@ spec:
           volumeMounts:
             {{- include "statline.tmpVolumeMount" . | nindent 12 }}
             {{- include "statline.secretVolumeMount" . | nindent 12 }}
+        {{- if .Values.api.seed.enabled }}
+        # Leagues and first ADMIN after the migrations (backend D-37); upserts only.
+        - name: seed
+          image: {{ include "statline.image" (dict "component" $c "image" .Values.api.image "ctx" $) }}
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          command: ["node", "dist/seed.js"]
+          env:
+            - name: HOME
+              value: /tmp
+            - name: SEED_ADMIN_EMAIL
+              value: {{ .Values.api.seed.adminEmail | quote }}
+            {{- include "statline.secretEnv" (dict "keys" .Values.api.seed.secretKeys "secretName" .Values.secrets.name) | nindent 12 }}
+          resources:
+            {{- toYaml .Values.api.migrations.resources | nindent 12 }}
+          securityContext:
+            {{- include "statline.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            {{- include "statline.tmpVolumeMount" . | nindent 12 }}
+            {{- include "statline.secretVolumeMount" . | nindent 12 }}
+        {{- end }}
       containers:
         - name: api
           image: {{ include "statline.image" (dict "component" $c "image" .Values.api.image "ctx" $) }}

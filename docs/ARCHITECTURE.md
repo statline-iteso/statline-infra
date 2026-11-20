@@ -58,6 +58,7 @@ Names are fixed; the SecretProviderClass (SL-58) and the backend read them by th
 |---|---|---|---|
 | `database-url-<env>` | `DATABASE_URL` for `statline_<env>` (admin login, `sslmode=require`) | yes | `module.datos.database_urls` |
 | `jwt-secret-<env>` | `JWT_SECRET`, 64 chars | yes | `random_password` |
+| `seed-admin-password-<env>` | `SEED_ADMIN_PASSWORD`: password of the first ADMIN (`admin@statline.local`), read only by the api `seed` initContainer | yes | `random_password` (32 chars) |
 | `jwt-refresh-secret-<env>` | `JWT_REFRESH_SECRET`, 64 chars | yes | `random_password` |
 | `api-sports-key` | `API_SPORTS_KEY` | no (one quota for all envs) | placeholder `set-me`, set out of band; Terraform ignores later changes |
 | `balldontlie-api-key` | `BALLDONTLIE_API_KEY` (ingesta NBA fallback) | no | placeholder `set-me`, set out of band before enabling `FALLBACK_HABILITADO`; Terraform ignores later changes |
@@ -99,7 +100,7 @@ Naming and labels: objects are named `<release>-<component>` (release `statline-
 | ConfigMap | 1 per component | non-secret settings (ports, `PREDICCIONES_URL`, `TEMPORADA_*`, log level) |
 | SecretProviderClass | 1 per env | mounts the Key Vault secrets and syncs a Kubernetes Secret `statline-secrets` |
 | Namespace | 3 | `plataforma`, `statline-staging`, `statline-prod` (created by `k3d-up` or ops; Argo uses `CreateNamespace=false`) |
-| Deployment | 3 per env | `web` (2 replicas), `api` (2, initContainer `migrate`), `predicciones` (1) |
+| Deployment | 3 per env | `web` (2 replicas), `api` (2, initContainers `migrate` then `seed`), `predicciones` (1) |
 | StatefulSet | 1 | Redis, in `plataforma` (`gitops/charts/redis`) |
 | CronJob | 3 per env | `ingesta-basquetbol` `0 8 * * *` · `ingesta-americano` `0 8 * * 2` · `ingesta-futbol` `0 8 * * 1,5` (UTC). `concurrencyPolicy: Forbid`, `backoffLimit: 1`, `activeDeadlineSeconds: 3600` |
 | Service | 4 | ClusterIP for web, api and predicciones (port 80 to the container port) and `redis` (6379) |
@@ -127,16 +128,17 @@ Per workload, the env vars it reads from the Secret (`<component>.secretKeys`, s
 | Workload | Secret keys |
 |---|---|
 | api (and its migrate initContainer) | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` |
+| api `seed` initContainer | `DATABASE_URL`, `SEED_ADMIN_PASSWORD` (`api.seed.secretKeys`; the api container never gets it) |
 | predicciones | `DATABASE_URL` |
 | ingesta CronJobs | `DATABASE_URL`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY` (optional) |
 
-Key Vault object names (`secrets.csi.objects`): staging uses `database-url-staging`, `jwt-secret-staging`, `jwt-refresh-secret-staging` and `api-sports-key`; prod uses the same names with `-prod`; `api-sports-key` and `balldontlie-api-key` are shared. The `balldontlie-api-key` object must exist in Key Vault even though the env var is optional: a missing object fails the CSI mount. Terraform outputs used for the SPC values: `key_vault_name`, `tenant_id`, `key_vault_csi_identity_client_id`. All names are configurable in values.
+Key Vault object names (`secrets.csi.objects`): staging uses `database-url-staging`, `jwt-secret-staging`, `jwt-refresh-secret-staging`, `seed-admin-password-staging` and `api-sports-key`; prod uses the same names with `-prod`; `api-sports-key` and `balldontlie-api-key` are shared. The `balldontlie-api-key` object must exist in Key Vault even though the env var is optional: a missing object fails the CSI mount. Terraform outputs used for the SPC values: `key_vault_name`, `tenant_id`, `key_vault_csi_identity_client_id`. All names are configurable in values.
 
 ### 4.4 Redis
 
 Own StatefulSet (1 replica, `redis:7.4-alpine`, uid 999, read-only root filesystem), with `--save ""`, `--appendonly no`, `maxmemory 128mb` and `allkeys-lru`. It is a cache, so `/data` is an emptyDir by default (`persistence.enabled` adds a PVC). Clients use `redis://redis.plataforma.svc.cluster.local:6379/<db>`: DB 0 for prod, DB 1 for staging, so the two environments never share keys (D-26). It has no auth, so its own NetworkPolicy (chart `gitops/charts/redis`) accepts port 6379 only from api pods in namespaces labelled `statline.io/ambiente` (Terraform sets the label on the statline namespaces; `make k3d-up` sets it locally). Redis gets no PodDisruptionBudget: it is one cache replica, and eviction costs only cache misses.
 
-The api Deployment has an **initContainer** that runs `prisma migrate deploy` with the same image (`node_modules/.bin/prisma migrate deploy`), so the schema is migrated before the new version serves traffic.
+The api Deployment has an **initContainer** that runs `prisma migrate deploy` with the same image (`node_modules/.bin/prisma migrate deploy`), so the schema is migrated before the new version serves traffic. A second initContainer, `seed` (`node dist/seed.js`, `api.seed.enabled`), then upserts the three `api-sports` leagues the ingesta CronJobs need and the first ADMIN (`api.seed.adminEmail`, password from `seed-admin-password-<env>`). It only inserts missing rows, so it is safe on every pod start (D-37, backend D-37).
 
 ### 4.5 Observability (SL-54)
 

@@ -38,6 +38,7 @@ secrets:
       JWT_REFRESH_SECRET: dev-only-refresh-secret-do-not-use
       API_SPORTS_KEY: dev-only-not-a-real-key
       BALLDONTLIE_API_KEY: dev-only-not-a-real-key
+      SEED_ADMIN_PASSWORD: dev-only-admin-password
 
 devPostgres:
   enabled: true

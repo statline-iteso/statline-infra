@@ -44,6 +44,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-34 | 2026-11-16 | No automatic rollback: rollback is a `git revert` of the image-tag bump; `argocd app rollback` only as a temporary stopgap | Decided |
 | D-35 | 2026-11-16 | Argo CD sync retry limit 2 (was 5) in staging and prod, so a failing smoke hook is not re-run six times | Decided |
 | D-36 | 2026-11-19 | App repos only build and push images and send `repository_dispatch`; this repo's `cd.yml` writes the tags (awk, in place) on one rolling `gitops/bump-<env>` branch and opens a PR (staging: auto-merged when CI passes; prod: manual review). Branch protection is not relaxed | Decided |
+| D-37 | 2026-11-19 | Leagues and the first ADMIN come from the api image's seed, run as a second initContainer; the admin password is a per-environment `random_password` in Key Vault | Decided |
 
 ## 2. Details
 
@@ -182,6 +183,9 @@ The app repos send the new tags with `repository_dispatch`, and `cd.yml` here wr
 
 **Rejected:** a branch-protection bypass for `github-actions[bot]`. It is simpler but lets the bot push to `main` with no review and no CI. **Cost:** a deploy waits for one CI run (a few minutes) after the images are pushed. **Rollback** is unchanged: revert the bump PR's squash commit (D-34).
 
+
+### D-37 · Seed initContainer and admin password in Key Vault
+A fresh cluster database had no `liga` rows, so every ingesta run failed (`LigaNoSembradaError`), and no ADMIN to call `/api/ingestas/ejecutar` or `/api/modelos/reentrenar`. The database is private to the VNet and the production image had no `tsx`, so `pnpm db:seed` could not reach it. The api image now ships the seed as `dist/seed.js` (backend D-37), and the chart runs it as a second initContainer after `migrate`. It only inserts missing rows, and a race between two pods is retried. Terraform generates `seed-admin-password-<env>` (32 chars) like the JWT secrets; only the `seed` container gets it as env. Read it with `az keyvault secret show`. **Limit:** rotating the secret does not change the existing user's password, because the seed never updates rows. Change it through the API instead. **Rejected:** a hook Job (one more ordering rule next to the smoke hook) and a manual Job (a step to forget on every new environment).
 
 ## 3. Known limitations
 

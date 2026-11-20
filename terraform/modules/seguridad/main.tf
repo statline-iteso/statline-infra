@@ -54,6 +54,14 @@ resource "random_password" "jwt_refresh_secret" {
   special  = false
 }
 
+# First ADMIN of each environment, created by the api seed initContainer (backend D-37). Read it
+# with `az keyvault secret show --vault-name <kv> -n seed-admin-password-<env> --query value -o tsv`.
+resource "random_password" "seed_admin" {
+  for_each = local.environments
+  length   = 32
+  special  = false
+}
+
 resource "azurerm_key_vault_secret" "database_url" {
   for_each     = local.environments
   name         = "database-url-${each.key}"
@@ -78,6 +86,16 @@ resource "azurerm_key_vault_secret" "jwt_refresh_secret" {
   for_each     = local.environments
   name         = "jwt-refresh-secret-${each.key}"
   value        = random_password.jwt_refresh_secret[each.key].result
+  key_vault_id = azurerm_key_vault.main.id
+  content_type = "text/plain"
+
+  depends_on = [azurerm_role_assignment.deployer_secrets_officer]
+}
+
+resource "azurerm_key_vault_secret" "seed_admin_password" {
+  for_each     = local.environments
+  name         = "seed-admin-password-${each.key}"
+  value        = random_password.seed_admin[each.key].result
   key_vault_id = azurerm_key_vault.main.id
   content_type = "text/plain"
 

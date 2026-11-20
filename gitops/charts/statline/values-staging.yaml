@@ -26,6 +26,7 @@ secrets:
       JWT_REFRESH_SECRET: jwt-refresh-secret-staging
       API_SPORTS_KEY: api-sports-key
       BALLDONTLIE_API_KEY: balldontlie-api-key
+      SEED_ADMIN_PASSWORD: seed-admin-password-staging
 
 # Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
 web:
