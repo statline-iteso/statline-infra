@@ -43,6 +43,8 @@ secrets:
       API_SPORTS_KEY: api-sports-key
       # Optional fallback provider. The Key Vault object must exist (Terraform seguridad module), or the CSI mount fails.
       BALLDONTLIE_API_KEY: balldontlie-api-key
+      # Password of the first ADMIN; only the api seed initContainer reads it (backend D-37).
+      SEED_ADMIN_PASSWORD: seed-admin-password
   plain:
     # Only read when secrets.mode is plain. Never put real values here.
     data: {}
@@ -131,6 +133,16 @@ api:
         memory: 128Mi
       limits:
         memory: 384Mi
+  # Second initContainer, after the migrations: `node dist/seed.js` upserts the three api-sports
+  # leagues the ingesta CronJobs look up, and the first ADMIN (backend D-37). Upserts only, so it is
+  # safe on every pod start and never changes existing rows. Uses the migrations resources.
+  seed:
+    enabled: true
+    adminEmail: admin@statline.local
+    # Only this container gets the admin password; the api container never sees it.
+    secretKeys:
+      - DATABASE_URL
+      - SEED_ADMIN_PASSWORD
   resources:
     requests:
       cpu: 100m
