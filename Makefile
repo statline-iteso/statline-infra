@@ -5,21 +5,26 @@ SHELL := bash
 TF := terraform
 PRINCIPAL := terraform/principal
 BOOTSTRAP := terraform/bootstrap
-# AWS Learner Lab: every target uses this profile, never [default] (make creds writes it).
+# AWS Learner Lab (D-38). The lab only allows us-east-1; `override` so neither env nor CLI changes it.
+override AWS_REGION := us-east-1
+export AWS_REGION
+# Locally every target uses the statline-lab profile (make creds writes it), never [default], which
+# belongs to another project on this machine. CI (CI=true) uses the AWS_* secrets from make creds.
+ifndef CI
 AWS_PROFILE ?= statline-lab
-LAB_REGION ?= us-east-1
-export AWS_PROFILE LAB_REGION
+export AWS_PROFILE
+endif
 
-.PHONY: help creds whoami bootstrap backend-config init plan apply apply-aks destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
+.PHONY: help creds check-creds bootstrap backend-config init plan apply apply-aks destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
 
 help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-16s %s\n",$$1,$$2}'
 
-creds: ## Paste the lab's AWS CLI block (AWS Details) into profile statline-lab; FROM=clipboard reads pbpaste. Once per lab session
-	@scripts/aws-creds.sh
+creds: ## Paste the lab "AWS CLI" block → profile statline-lab + statline-infra secrets (FROM=clipboard; SKIP_GH=1: local only)
+	@scripts/lab-creds.sh
 
-whoami: ## Check the statline-lab credentials (fails once the lab session has expired)
-	@aws sts get-caller-identity --query '{Account:Account,Arn:Arn}' --output table || { echo "Credentials for $(AWS_PROFILE) missing or expired: run make creds"; exit 1; }
+check-creds: ## Fail early if the lab credentials are missing or expired
+	@scripts/check-creds.sh
 
 bootstrap: ## Once per subscription: state storage account (local state)
 	$(TF) -chdir=$(BOOTSTRAP) init -input=false
