@@ -26,10 +26,13 @@ creds: ## Paste the lab "AWS CLI" block → profile statline-lab + statline-infr
 check-creds: ## Fail early if the lab credentials are missing or expired
 	@scripts/check-creds.sh
 
-bootstrap: ## Once per subscription: state storage account (local state)
+bootstrap: check-creds ## Once per lab account: S3 state bucket + ingress Elastic IP (local state), then backend.hcl
 	$(TF) -chdir=$(BOOTSTRAP) init -input=false
-	$(TF) -chdir=$(BOOTSTRAP) apply
-	$(MAKE) backend-config
+	$(TF) -chdir=$(BOOTSTRAP) plan -input=false -out=bootstrap.tfplan
+	@[[ "$${CONFIRM:-}" == "yes" ]] || { read -rp "Apply the bootstrap plan above (S3 bucket: cents; Elastic IP: ~USD 3.60/month)? [y/N] " a; [[ "$$a" == y ]]; }
+	$(TF) -chdir=$(BOOTSTRAP) apply -input=false bootstrap.tfplan
+	@rm -f $(BOOTSTRAP)/bootstrap.tfplan
+	$(MAKE) --no-print-directory backend-config
 
 backend-config: ## Write terraform/principal/backend.hcl from the bootstrap outputs
 	scripts/backend-config.sh
@@ -64,7 +67,7 @@ fmt: ## terraform fmt -recursive
 validate: ## terraform validate without a backend
 	for d in $(BOOTSTRAP) $(PRINCIPAL); do $(TF) -chdir=$$d init -backend=false -input=false >/dev/null && $(TF) -chdir=$$d validate; done
 
-tflint: ## tflint with the azurerm ruleset
+tflint: ## tflint with the aws ruleset (and azurerm until principal moves)
 	cd terraform && tflint --init && tflint --recursive --config "$$PWD/.tflint.hcl"
 
 # Helm: values files are the environments; the defaults file alone is not renderable (image tags are required).

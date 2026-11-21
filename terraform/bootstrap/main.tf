@@ -1,86 +1,94 @@
-# Bootstrap: the storage account that holds every other stack's state.
+# Bootstrap: the S3 bucket that holds every other stack's state, and the Elastic IP of the ingress.
 # Its own state is local (terraform/bootstrap/terraform.tfstate, gitignored) because it creates
-# the backend the rest depends on. Run once per subscription: `make bootstrap`.
+# the backend the rest depends on. Run once per lab account: `make bootstrap`.
+# Both resources outlive `make destroy` of principal: the state must, and the Elastic IP keeps the
+# public address (and so the nip.io hosts in the GitOps values) the same across sessions (D-38).
 
 terraform {
-  required_version = ">= 1.9"
+  # use_lockfile (S3-native state locking) needs 1.10.
+  required_version = ">= 1.10"
   required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 4.14"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.6"
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
     }
   }
 }
 
-provider "azurerm" {
-  features {}
-  subscription_id = var.subscription_id
-}
+provider "aws" {
+  region = var.region
 
-data "azurerm_client_config" "current" {}
-
-resource "random_string" "suffix" {
-  length  = 6
-  special = false
-  upper   = false
-}
-
-resource "azurerm_resource_group" "tfstate" {
-  name     = "rg-${var.project}-tfstate"
-  location = var.location
-  tags     = local.tags
-}
-
-resource "azurerm_storage_account" "tfstate" {
-  # Globally unique, 3-24 lowercase alphanumerics.
-  name                            = "st${var.project}tf${random_string.suffix.result}"
-  resource_group_name             = azurerm_resource_group.tfstate.name
-  location                        = azurerm_resource_group.tfstate.location
-  account_tier                    = "Standard"
-  account_replication_type        = "LRS"
-  min_tls_version                 = "TLS1_2"
-  allow_nested_items_to_be_public = false
-  # State is read with Entra ID (use_azuread_auth); no account keys needed.
-  shared_access_key_enabled = false
-
-  blob_properties {
-    versioning_enabled = true
-    delete_retention_policy {
-      days = 14
-    }
-    container_delete_retention_policy {
-      days = 14
+  default_tags {
+    tags = {
+      Project   = var.project
+      ManagedBy = "terraform"
+      Stack     = "bootstrap"
     }
   }
+}
 
-  tags = local.tags
+data "aws_caller_identity" "current" {}
+
+# Deterministic name (project + account id): scripts and CI can derive it without reading this state.
+resource "aws_s3_bucket" "tfstate" {
+  bucket = "${var.project}-tfstate-${data.aws_caller_identity.current.account_id}"
 
   lifecycle {
     prevent_destroy = true
   }
 }
 
-resource "azurerm_storage_container" "tfstate" {
-  name                  = "tfstate"
-  storage_account_id    = azurerm_storage_account.tfstate.id
-  container_access_type = "private"
+resource "aws_s3_bucket_versioning" "tfstate" {
+  bucket = aws_s3_bucket.tfstate.id
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
 
-# Whoever runs the bootstrap can read and write state (and lease the blob for locking).
-resource "azurerm_role_assignment" "state_writer" {
-  scope                = azurerm_storage_account.tfstate.id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = data.azurerm_client_config.current.object_id
+resource "aws_s3_bucket_server_side_encryption_configuration" "tfstate" {
+  bucket = aws_s3_bucket.tfstate.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
 }
 
-locals {
+resource "aws_s3_bucket_public_access_block" "tfstate" {
+  bucket                  = aws_s3_bucket.tfstate.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "tfstate" {
+  bucket = aws_s3_bucket.tfstate.id
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+# Old state versions are kept 30 days, enough to roll back a bad apply.
+resource "aws_s3_bucket_lifecycle_configuration" "tfstate" {
+  bucket = aws_s3_bucket.tfstate.id
+  rule {
+    id     = "expire-noncurrent-state"
+    status = "Enabled"
+    filter {}
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.tfstate]
+}
+
+# Public address of the ingress NLB (principal attaches it through the
+# aws-load-balancer-eip-allocations annotation). Idle, it bills as one public IPv4 (~USD 3.60/month).
+resource "aws_eip" "ingress" {
+  domain = "vpc"
   tags = {
-    Project   = var.project
-    ManagedBy = "terraform"
-    Stack     = "bootstrap"
+    Name = "${var.project}-ingress"
   }
 }

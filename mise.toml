@@ -1,6 +1,6 @@
 # Pinned CLI versions for this repo: `mise install`.
 [tools]
-terraform = "1.9.8"
+terraform = "1.10.5"
 tflint = "0.54.0"
 kubectl = "1.30.6"
 helm = "3.16.3"
