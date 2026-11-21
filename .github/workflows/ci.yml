@@ -62,8 +62,6 @@ jobs:
     needs: terraform
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    # Informational: a stale lab session or a cluster that does not exist yet must not block a merge.
-    continue-on-error: true
     permissions:
       contents: read
       pull-requests: write # plan comment
@@ -79,17 +77,22 @@ jobs:
         run: |
           if [[ -z "$AWS_ACCESS_KEY_ID" ]]; then
             echo "::notice::No AWS_* secrets (run make creds); skipping terraform plan."
-          elif scripts/check-creds.sh; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-          else
+          elif ! scripts/check-creds.sh; then
             echo "::notice::Lab credentials expired (run make creds in a new lab session); skipping terraform plan."
+          elif ! aws s3api head-bucket --bucket "statline-tfstate-$(aws sts get-caller-identity --query Account --output text)" 2>/dev/null; then
+            echo "::notice::No state bucket in this lab account yet (run make bootstrap); skipping terraform plan."
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
       - uses: hashicorp/setup-terraform@v3
         if: steps.creds.outputs.ok == 'true'
         with:
           terraform_version: 1.10.5
+      # init and plan are informational: a failure is reported in the PR comment, not as a red check.
       - name: terraform init
         if: steps.creds.outputs.ok == 'true'
+        id: init
+        continue-on-error: true
         working-directory: terraform/principal
         run: |
           acct=$(aws sts get-caller-identity --query Account --output text)
@@ -100,8 +103,9 @@ jobs:
             -backend-config="use_lockfile=true" \
             -backend-config="encrypt=true"
       - name: terraform plan
-        if: steps.creds.outputs.ok == 'true'
+        if: steps.creds.outputs.ok == 'true' && steps.init.outcome == 'success'
         id: plan
+        continue-on-error: true
         working-directory: terraform/principal
         run: |
           set -o pipefail
