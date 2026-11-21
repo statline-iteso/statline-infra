@@ -1,75 +1,65 @@
-# red: VNet 10.0.0.0/16 with one subnet for AKS and one delegated to PostgreSQL Flexible Server,
-# an NSG on the AKS subnet and the private DNS zone the database registers in.
+# red: VPC with one public subnet (nodes and the ingress NLB) and two private subnets (RDS and the
+# EKS control-plane ENIs; both need two AZs). No NAT gateway (~USD 1/day): nodes get public IPs
+# and pull images through the internet gateway; the cluster security group allows no inbound
+# from the internet except the NodePorts the NLB controller opens (D-38).
+#
+# Only one public subnet exists on purpose: the EKS cloud controller places an internet-facing
+# NLB in one public subnet per AZ, and one Elastic IP means one subnet.
 
-resource "azurerm_virtual_network" "main" {
-  name                = "vnet-${var.name}"
-  resource_group_name = var.resource_group_name
-  location            = var.location
-  address_space       = [var.address_space]
-  tags                = var.tags
+resource "aws_vpc" "main" {
+  cidr_block           = var.cidr
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+  tags                 = { Name = "vpc-${var.name}" }
 }
 
-resource "azurerm_subnet" "aks" {
-  name                 = "snet-aks"
-  resource_group_name  = var.resource_group_name
-  virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [cidrsubnet(var.address_space, 4, 0)] # 10.0.0.0/20: nodes and pods (Azure CNI)
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+  tags   = { Name = "igw-${var.name}" }
 }
 
-resource "azurerm_subnet" "postgres" {
-  name                 = "snet-postgres"
-  resource_group_name  = var.resource_group_name
-  virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [cidrsubnet(var.address_space, 8, 16)] # 10.0.16.0/24
-  service_endpoints    = ["Microsoft.Storage"]
-
-  delegation {
-    name = "postgres-flexible"
-    service_delegation {
-      name    = "Microsoft.DBforPostgreSQL/flexibleServers"
-      actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
-    }
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = cidrsubnet(var.cidr, 4, 0) # 10.0.0.0/20
+  availability_zone       = var.azs[0]
+  map_public_ip_on_launch = true
+  tags = {
+    Name                                        = "snet-${var.name}-public"
+    "kubernetes.io/role/elb"                    = "1"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 }
 
-resource "azurerm_network_security_group" "aks" {
-  name                = "nsg-${var.name}-aks"
-  resource_group_name = var.resource_group_name
-  location            = var.location
-  tags                = var.tags
-
-  # Only HTTP(S) from the Internet, to the ingress-nginx load balancer.
-  security_rule {
-    name                       = "allow-http-https-inbound"
-    description                = "Public traffic to the ingress controller"
-    priority                   = 100
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_address_prefix      = "Internet"
-    source_port_range          = "*"
-    destination_address_prefix = "*"
-    destination_port_ranges    = ["80", "443"]
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
   }
+  tags = { Name = "rt-${var.name}-public" }
 }
 
-resource "azurerm_subnet_network_security_group_association" "aks" {
-  subnet_id                 = azurerm_subnet.aks.id
-  network_security_group_id = azurerm_network_security_group.aks.id
+resource "aws_route_table_association" "public" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public.id
 }
 
-# Flexible Server with private access needs a zone ending in .postgres.database.azure.com.
-resource "azurerm_private_dns_zone" "postgres" {
-  name                = "${var.name}.private.postgres.database.azure.com"
-  resource_group_name = var.resource_group_name
-  tags                = var.tags
+# No route to the internet: only VPC-local traffic (RDS, control-plane ENIs).
+resource "aws_subnet" "private" {
+  count             = length(var.azs)
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = cidrsubnet(var.cidr, 8, 64 + count.index) # 10.0.64.0/24, 10.0.65.0/24
+  availability_zone = var.azs[count.index]
+  tags              = { Name = "snet-${var.name}-private-${var.azs[count.index]}" }
 }
 
-resource "azurerm_private_dns_zone_virtual_network_link" "postgres" {
-  name                  = "link-${var.name}"
-  resource_group_name   = var.resource_group_name
-  private_dns_zone_name = azurerm_private_dns_zone.postgres.name
-  virtual_network_id    = azurerm_virtual_network.main.id
-  registration_enabled  = false
-  tags                  = var.tags
+resource "aws_route_table" "private" {
+  vpc_id = aws_vpc.main.id
+  tags   = { Name = "rt-${var.name}-private" }
+}
+
+resource "aws_route_table_association" "private" {
+  count          = length(var.azs)
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private.id
 }

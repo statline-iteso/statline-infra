@@ -98,35 +98,31 @@ make check-creds                  # are the lab credentials still valid?
 
 ## First time on a lab account
 
-The project runs on the AWS Learner Lab (D-38). The principal stack below moves from Azure to AWS in the next PRs; the bootstrap is already AWS.
+The project runs on the AWS Learner Lab (D-38): EKS on the lab's `LabRole`, RDS PostgreSQL, SSM Parameter Store, us-east-1 only.
 
 ```bash
 make creds                        # start of every lab session (see Tooling)
-make bootstrap                    # S3 state bucket + ingress Elastic IP (local state); asks before applying
-                                  # then writes terraform/principal/backend.hcl
+make bootstrap                    # once per lab account: S3 state bucket + ingress Elastic IP (local state);
+                                  # asks before applying, then writes terraform/principal/backend.hcl
 terraform -chdir=terraform/bootstrap output -raw ingress_ip   # hosts: staging.<ip>.nip.io and <ip>.nip.io
-cp terraform/principal/terraform.tfvars.example terraform/principal/principal.auto.tfvars
-make apply-aks                    # step 1: only the AKS cluster (the kubernetes/helm providers need it)
-make plan                         # step 2: everything else (namespaces, ingress IP, platform charts)
+make apply-eks                    # step 1: only the EKS cluster and nodes (~15 min; the kubernetes/helm providers need it)
+make plan                         # step 2: everything else (RDS, SSM, namespaces, platform charts, database Job)
 make apply                        # asks before applying
-az aks get-credentials -g rg-statline -n aks-statline
-terraform -chdir=terraform/principal output ingress_public_ip
+make kubeconfig                   # context eks-statline
 terraform -chdir=terraform/principal output -raw grafana_admin_password   # Grafana, user admin
 ```
 
-**Two-step first apply.** The `kubernetes` and `helm` providers read the cluster's kubeconfig from
-`module.aks`. On a cluster that does not exist yet those values are unknown, so a single
-`make plan` can fail on the providers. `make apply-aks` creates the cluster alone; after that every
-plan is normal. The same applies when the cluster is recreated from scratch (decision D-24).
+No tfvars are needed; `terraform/principal/terraform.tfvars.example` lists the optional overrides.
 
-**Domain (optional).** Set `dominio` in `principal.auto.tfvars` when the team decides it. Then Terraform
-creates the DNS zone and the `@` and `staging` A records, and `terraform output dns_name_servers` lists
-the name servers to delegate at the registrar. Without `dominio` no zone is created.
+**Two-step first apply.** The `kubernetes` and `helm` providers talk to the cluster created in
+`module.eks`. A single plan works (it plans 50 resources), but applying the charts in the same run
+as the cluster relies on Terraform configuring those providers late. `make apply-eks` creates the
+cluster alone first, so every later plan sees a real cluster (decision D-24).
 
 **Argo CD UI** (no public Ingress yet): `kubectl -n plataforma port-forward svc/argo-cd-argocd-server 8080:80`.
 
 > [!WARNING]
-> **Run `make destroy` when you are done for the day** unless the cluster must stay up. AKS nodes (2× Standard_B2s), the load balancer and PostgreSQL bill by the hour against the student credit. The bootstrap storage account stays; it costs cents.
+> **Run `make destroy` when you are done for the day** unless the cluster must stay up. The EKS control plane, 2 × t3.medium, RDS and the NLB bill about USD 0.30/h against the USD 50 lab budget. `make destroy` removes the platform charts first, waits for the ingress NLB to go, then destroys the rest. The bootstrap bucket and the Elastic IP stay (cents, plus ~USD 3.60/month for the IP).
 
 ### Recovering the bootstrap state
 

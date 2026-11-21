@@ -1,40 +1,26 @@
-output "server_fqdn" {
-  description = "Private FQDN of the server."
-  value       = azurerm_postgresql_flexible_server.main.fqdn
+output "address" {
+  description = "Private DNS name of the instance."
+  value       = aws_db_instance.main.address
 }
 
 output "database_names" {
-  description = "Application databases on the server (statline_<env>)."
-  value       = [for db in azurerm_postgresql_flexible_server_database.app : db.name]
+  description = "Application databases (created by the plataforma Job)."
+  value       = var.bases_de_datos
 }
 
-output "admin_login" {
-  description = "Administrator login."
-  value       = azurerm_postgresql_flexible_server.main.administrator_login
-}
-
-output "admin_password" {
-  description = "Administrator password. Goes to Key Vault (module seguridad), never to a file."
-  value       = random_password.admin.result
-  sensitive   = true
-}
-
-output "database_urls" {
-  description = "DATABASE_URL per environment (key = env, e.g. staging, prod), with the admin login and sslmode=require. Stored in Key Vault by module seguridad."
-  value = {
-    for name, db in azurerm_postgresql_flexible_server_database.app :
-    trimprefix(name, "statline_") => format(
-      "postgresql://%s:%s@%s:5432/%s?sslmode=require",
-      urlencode(azurerm_postgresql_flexible_server.main.administrator_login),
-      urlencode(random_password.admin.result),
-      azurerm_postgresql_flexible_server.main.fqdn,
-      db.name,
-    )
-  }
+output "admin_url" {
+  description = "Master connection string to the default postgres database (the plataforma Job creates the app databases with it)."
+  value = format("postgresql://%s:%s@%s:5432/postgres?sslmode=require",
+  urlencode(var.admin_login), urlencode(random_password.admin.result), aws_db_instance.main.address)
   sensitive = true
 }
 
-output "server_id" {
-  description = "PostgreSQL Flexible Server id (diagnostic settings in module observabilidad)."
-  value       = azurerm_postgresql_flexible_server.main.id
+output "database_urls" {
+  description = "DATABASE_URL per environment (key = env), with the master login and sslmode=require. Stored in SSM by module seguridad."
+  value = {
+    for db in var.bases_de_datos :
+    trimprefix(db, "statline_") => format("postgresql://%s:%s@%s:5432/%s?sslmode=require",
+    urlencode(var.admin_login), urlencode(random_password.admin.result), aws_db_instance.main.address, db)
+  }
+  sensitive = true
 }

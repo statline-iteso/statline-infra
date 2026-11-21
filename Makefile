@@ -15,7 +15,7 @@ AWS_PROFILE ?= statline-lab
 export AWS_PROFILE
 endif
 
-.PHONY: help creds check-creds bootstrap backend-config init plan apply apply-aks destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
+.PHONY: help creds check-creds bootstrap backend-config init plan apply apply-eks kubeconfig destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
 
 help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-16s %s\n",$$1,$$2}'
@@ -37,9 +37,12 @@ bootstrap: check-creds ## Once per lab account: S3 state bucket + ingress Elasti
 backend-config: ## Write terraform/principal/backend.hcl from the bootstrap outputs
 	scripts/backend-config.sh
 
-init: ## terraform init for the principal stack (remote state)
+init: check-creds ## terraform init for the principal stack (remote state in the bootstrap bucket)
 	@test -f $(PRINCIPAL)/backend.hcl || { echo "Missing backend.hcl: run make bootstrap or make backend-config"; exit 1; }
-	$(TF) -chdir=$(PRINCIPAL) init -input=false -backend-config=backend.hcl
+	@acct=$$(aws sts get-caller-identity --query Account --output text); \
+	  grep -q "statline-tfstate-$$acct\"" $(PRINCIPAL)/backend.hcl || { \
+	  echo "backend.hcl is not for lab account $$acct (new lab account?): run make backend-config"; exit 1; }
+	$(TF) -chdir=$(PRINCIPAL) init -input=false -reconfigure -backend-config=backend.hcl
 
 plan: init ## Plan the principal stack
 	$(TF) -chdir=$(PRINCIPAL) plan -input=false -out=principal.tfplan
@@ -48,14 +51,21 @@ apply: plan ## ⚠ Apply the saved plan (creates billable resources)
 	@[[ "$${CONFIRM:-}" == "yes" ]] || { read -rp "Apply this plan? [y/N] " a; [[ "$$a" == y ]]; }
 	$(TF) -chdir=$(PRINCIPAL) apply -input=false principal.tfplan
 
-apply-aks: init ## ⚠ First apply only: create module aks alone (providers need the cluster, see README)
-	$(TF) -chdir=$(PRINCIPAL) plan -input=false -target=module.aks -out=aks.tfplan
-	@[[ "$${CONFIRM:-}" == "yes" ]] || { read -rp "Apply the AKS cluster plan? [y/N] " a; [[ "$$a" == y ]]; }
-	$(TF) -chdir=$(PRINCIPAL) apply -input=false aks.tfplan
+apply-eks: init ## ⚠ First apply only: create module eks alone (providers need the cluster, see README)
+	$(TF) -chdir=$(PRINCIPAL) plan -input=false -target=module.eks -out=eks.tfplan
+	@[[ "$${CONFIRM:-}" == "yes" ]] || { read -rp "Apply the EKS cluster plan (bills ~USD 0.30/h with the rest until make destroy)? [y/N] " a; [[ "$$a" == y ]]; }
+	$(TF) -chdir=$(PRINCIPAL) apply -input=false eks.tfplan
+	@rm -f $(PRINCIPAL)/eks.tfplan
 
-destroy: init ## ⚠ Destroy the principal stack
+kubeconfig: check-creds ## Write the eks-statline context to ~/.kube/config
+	aws eks update-kubeconfig --name statline --alias eks-statline
+
+destroy: init ## ⚠ Destroy the principal stack (bootstrap bucket and Elastic IP stay)
 	$(TF) -chdir=$(PRINCIPAL) plan -destroy -input=false
 	@[[ "$${CONFIRM:-}" == "yes" ]] || { read -rp "Destroy everything above? [y/N] " a; [[ "$$a" == y ]]; }
+	@# The ingress NLB is created by the cluster, not Terraform: remove the charts, wait for it to go.
+	$(TF) -chdir=$(PRINCIPAL) destroy -input=false -auto-approve -target=module.plataforma
+	scripts/esperar-nlb.sh
 	$(TF) -chdir=$(PRINCIPAL) destroy -input=false -auto-approve
 
 output: ## Show principal outputs
@@ -67,7 +77,7 @@ fmt: ## terraform fmt -recursive
 validate: ## terraform validate without a backend
 	for d in $(BOOTSTRAP) $(PRINCIPAL); do $(TF) -chdir=$$d init -backend=false -input=false >/dev/null && $(TF) -chdir=$$d validate; done
 
-tflint: ## tflint with the aws ruleset (and azurerm until principal moves)
+tflint: ## tflint with the aws ruleset
 	cd terraform && tflint --init && tflint --recursive --config "$$PWD/.tflint.hcl"
 
 # Helm: values files are the environments; the defaults file alone is not renderable (image tags are required).
@@ -106,15 +116,15 @@ k3d-deploy: ## Install redis (plataforma) and the chart with values-k3d (statlin
 	helm upgrade --install statline gitops/charts/statline --namespace statline-staging -f gitops/charts/statline/values-k3d.yaml --wait
 
 # Smoke checks from your machine, in a throwaway pod (same script as the smoke-test Job). Not run by CI.
-# Refuses unless the current context is a k3d-* or aks-statline* cluster. The release defaults to statline-<ENV>;
+# Refuses unless the current context is a k3d-* or eks-statline* cluster. The release defaults to statline-<ENV>;
 # k3d-deploy installs it as "statline", so: make smoke ENV=staging RELEASE=statline
 RELEASE ?= statline-$(ENV)
 SMOKE_IMAGE := curlimages/curl:8.11.1
 SMOKE_OVERRIDES = {"spec":{"automountServiceAccountToken":false,"securityContext":{"runAsNonRoot":true,"runAsUser":100,"runAsGroup":101,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"statline-smoke","securityContext":{"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}},"env":[{"name":"SMOKE_WEB","value":"http://$(RELEASE)-web"},{"name":"SMOKE_API","value":"http://$(RELEASE)-api"},{"name":"SMOKE_PREDICCIONES","value":"http://$(RELEASE)-predicciones"}]}]}}
 
-smoke: ## In-cluster smoke checks: make smoke ENV=staging|prod [RELEASE=...] (k3d-* or aks-statline* contexts only)
+smoke: ## In-cluster smoke checks: make smoke ENV=staging|prod [RELEASE=...] (k3d-* or eks-statline* contexts only)
 	@case "$(ENV)" in staging|prod) ;; *) echo "Set ENV=staging or ENV=prod"; exit 1;; esac
-	@ctx=$$(kubectl config current-context); case "$$ctx" in k3d-*|aks-statline*) ;; *) echo "Refusing: current context is '$$ctx', not k3d-* or aks-statline*"; exit 1;; esac
+	@ctx=$$(kubectl config current-context); case "$$ctx" in k3d-*|eks-statline*) ;; *) echo "Refusing: current context is '$$ctx', not k3d-* or eks-statline*"; exit 1;; esac
 	kubectl run statline-smoke --namespace statline-$(ENV) --rm -i --restart=Never --image=$(SMOKE_IMAGE) --labels=statline.io/smoke=true --override-type=strategic --overrides='$(SMOKE_OVERRIDES)' -- sh -s < gitops/charts/statline/files/smoke-test.sh
 
 diagram: ## Render docs/solucion.mmd → docs/solucion.png

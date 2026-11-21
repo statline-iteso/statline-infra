@@ -1,5 +1,6 @@
 locals {
-  name = "statline"
+  name          = "statline"
+  db_identifier = "${local.name}-pg"
 
   tags = {
     Project   = "statline"
