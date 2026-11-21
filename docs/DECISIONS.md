@@ -194,6 +194,7 @@ We were denied Azure for Students and the Azure free credits, and the course doe
 The mapping, landed in steps:
 - **State:** S3 bucket `statline-tfstate-<account>` with versioning, SSE-S3, public access blocked and native locking (`use_lockfile`, Terraform ≥ 1.10), in the bootstrap stack.
 - **Ingress address:** an Elastic IP in the bootstrap stack, so it survives `make destroy` of principal and the nip.io hosts (`staging.<ip>.nip.io`, `<ip>.nip.io`) never change. About USD 3.60/month idle.
+- **The state bucket is an `awscc_s3_bucket`** (Cloud Control), not `aws_s3_bucket`: the lab's service control policy denies `s3:GetBucketObjectLockConfiguration`, which every read of `aws_s3_bucket` calls, so the first `make bootstrap` failed after creating the bucket. `scripts/bootstrap-account.sh` runs before each bootstrap plan: it archives a state from another lab account, drops the old `aws_s3_bucket` entry, and imports an existing bucket or Elastic IP, so a failed or lost bootstrap is fixed by running `make bootstrap` again.
 - **Credentials:** `make creds` writes the lab keys to the `statline-lab` profile (never `[default]`) and to the `AWS_*` secrets of this repo for CI.
 - **Next:** EKS (LabRole as cluster and node role) replaces AKS, RDS replaces the Flexible Server, SSM SecureStrings + External Secrets replace Key Vault + CSI, CloudWatch replaces Log Analytics, and the `dns` module goes away.
 

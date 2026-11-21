@@ -1,6 +1,11 @@
+output "account_id" {
+  description = "Lab account this state belongs to (scripts/bootstrap-account.sh compares it)."
+  value       = data.aws_caller_identity.current.account_id
+}
+
 output "state_bucket" {
   description = "S3 bucket that holds remote state (written into principal/backend.hcl)."
-  value       = aws_s3_bucket.tfstate.bucket
+  value       = awscc_s3_bucket.tfstate.bucket_name
 }
 
 output "region" {
