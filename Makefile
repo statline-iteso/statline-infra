@@ -28,6 +28,8 @@ check-creds: ## Fail early if the lab credentials are missing or expired
 
 bootstrap: check-creds ## Once per lab account: S3 state bucket + ingress Elastic IP (local state), then backend.hcl
 	$(TF) -chdir=$(BOOTSTRAP) init -input=false
+	@# Align the local state with the lab account: archive another account's state, adopt an existing bucket or IP.
+	scripts/bootstrap-account.sh
 	$(TF) -chdir=$(BOOTSTRAP) plan -input=false -out=bootstrap.tfplan
 	@[[ "$${CONFIRM:-}" == "yes" ]] || { read -rp "Apply the bootstrap plan above (S3 bucket: cents; Elastic IP: ~USD 3.60/month)? [y/N] " a; [[ "$$a" == y ]]; }
 	$(TF) -chdir=$(BOOTSTRAP) apply -input=false bootstrap.tfplan

@@ -126,16 +126,4 @@ cluster alone first, so every later plan sees a real cluster (decision D-24).
 
 ### Recovering the bootstrap state
 
-The `bootstrap` stack keeps its state locally (`terraform/bootstrap/terraform.tfstate`, gitignored) because it creates the bucket every other stack stores its state in. If that file is lost, **don't** run `make bootstrap` again (the bucket name is fixed, so the create fails, and a second Elastic IP would change the address). Import the existing resources:
-
-```bash
-cd terraform/bootstrap && terraform init
-B=statline-tfstate-$(aws sts get-caller-identity --query Account --output text)
-for r in aws_s3_bucket aws_s3_bucket_versioning aws_s3_bucket_server_side_encryption_configuration \
-         aws_s3_bucket_public_access_block aws_s3_bucket_ownership_controls aws_s3_bucket_lifecycle_configuration; do
-  terraform import "$r.tfstate" "$B"
-done
-terraform import aws_eip.ingress "$(aws ec2 describe-addresses --filters Name=tag:Name,Values=statline-ingress --query 'Addresses[0].AllocationId' --output text)"
-terraform plan                                              # should say "No changes"
-cd ../.. && make backend-config
-```
+The `bootstrap` stack keeps its state locally (`terraform/bootstrap/terraform.tfstate`, gitignored) because it creates the bucket every other stack stores its state in. If that file is lost, or a first apply failed halfway, just run `make bootstrap` again: `scripts/bootstrap-account.sh` imports the existing bucket and Elastic IP before the plan, so it adopts them instead of creating a second Elastic IP (which would change the address). A state left over from another lab account is moved to `terraform/bootstrap/archive/<account>/`.
