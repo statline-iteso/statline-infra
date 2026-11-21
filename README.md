@@ -91,6 +91,8 @@ curl https://mise.run | sh        # or: brew install mise / winget install jdx.m
 mise install                      # installs every pinned tool for this repo
 pre-commit install                # git hooks: fmt, validate, tflint, shellcheck
 make help                         # every target
+make creds                        # AWS Learner Lab: paste the AWS CLI block (AWS Details), Ctrl-D; once per lab session
+make whoami                       # are the lab credentials still valid?
 ```
 
 ## First time on a subscription
