@@ -5,11 +5,21 @@ SHELL := bash
 TF := terraform
 PRINCIPAL := terraform/principal
 BOOTSTRAP := terraform/bootstrap
+# AWS Learner Lab: every target uses this profile, never [default] (make creds writes it).
+AWS_PROFILE ?= statline-lab
+LAB_REGION ?= us-east-1
+export AWS_PROFILE LAB_REGION
 
-.PHONY: help bootstrap backend-config init plan apply apply-aks destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
+.PHONY: help creds whoami bootstrap backend-config init plan apply apply-aks destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
 
 help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-16s %s\n",$$1,$$2}'
+
+creds: ## Paste the lab's AWS CLI block (AWS Details) into profile statline-lab; FROM=clipboard reads pbpaste. Once per lab session
+	@scripts/aws-creds.sh
+
+whoami: ## Check the statline-lab credentials (fails once the lab session has expired)
+	@aws sts get-caller-identity --query '{Account:Account,Arn:Arn}' --output table || { echo "Credentials for $(AWS_PROFILE) missing or expired: run make creds"; exit 1; }
 
 bootstrap: ## Once per subscription: state storage account (local state)
 	$(TF) -chdir=$(BOOTSTRAP) init -input=false
