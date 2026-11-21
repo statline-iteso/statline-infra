@@ -96,13 +96,15 @@ make creds                        # AWS Learner Lab, once per session: paste the
 make check-creds                  # are the lab credentials still valid?
 ```
 
-## First time on a subscription
+## First time on a lab account
+
+The project runs on the AWS Learner Lab (D-38). The principal stack below moves from Azure to AWS in the next PRs; the bootstrap is already AWS.
 
 ```bash
-az login
-az account set --subscription "<Azure for Students>"
-make bootstrap                    # resource group + storage account for remote state (local state)
+make creds                        # start of every lab session (see Tooling)
+make bootstrap                    # S3 state bucket + ingress Elastic IP (local state); asks before applying
                                   # then writes terraform/principal/backend.hcl
+terraform -chdir=terraform/bootstrap output -raw ingress_ip   # hosts: staging.<ip>.nip.io and <ip>.nip.io
 cp terraform/principal/terraform.tfvars.example terraform/principal/principal.auto.tfvars
 make apply-aks                    # step 1: only the AKS cluster (the kubernetes/helm providers need it)
 make plan                         # step 2: everything else (namespaces, ingress IP, platform charts)
@@ -128,13 +130,16 @@ the name servers to delegate at the registrar. Without `dominio` no zone is crea
 
 ### Recovering the bootstrap state
 
-The `bootstrap` stack keeps its state locally (`terraform/bootstrap/terraform.tfstate`, gitignored) because it creates the storage account every other stack stores its state in. If that file is lost, **don't** run `make bootstrap` again; import the existing resources:
+The `bootstrap` stack keeps its state locally (`terraform/bootstrap/terraform.tfstate`, gitignored) because it creates the bucket every other stack stores its state in. If that file is lost, **don't** run `make bootstrap` again (the bucket name is fixed, so the create fails, and a second Elastic IP would change the address). Import the existing resources:
 
 ```bash
 cd terraform/bootstrap && terraform init
-terraform import random_string.suffix <suffix>             # the 6 chars after "ststatlinetf"
-terraform import azurerm_resource_group.tfstate /subscriptions/<sub>/resourceGroups/rg-statline-tfstate
-terraform import azurerm_storage_account.tfstate /subscriptions/<sub>/resourceGroups/rg-statline-tfstate/providers/Microsoft.Storage/storageAccounts/<name>
-terraform plan                                              # should say "No changes" (or only the role assignment)
+B=statline-tfstate-$(aws sts get-caller-identity --query Account --output text)
+for r in aws_s3_bucket aws_s3_bucket_versioning aws_s3_bucket_server_side_encryption_configuration \
+         aws_s3_bucket_public_access_block aws_s3_bucket_ownership_controls aws_s3_bucket_lifecycle_configuration; do
+  terraform import "$r.tfstate" "$B"
+done
+terraform import aws_eip.ingress "$(aws ec2 describe-addresses --filters Name=tag:Name,Values=statline-ingress --query 'Addresses[0].AllocationId' --output text)"
+terraform plan                                              # should say "No changes"
 cd ../.. && make backend-config
 ```

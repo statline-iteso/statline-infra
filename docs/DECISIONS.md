@@ -45,6 +45,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-35 | 2026-11-16 | Argo CD sync retry limit 2 (was 5) in staging and prod, so a failing smoke hook is not re-run six times | Decided |
 | D-36 | 2026-11-19 | App repos only build and push images and send `repository_dispatch`; this repo's `cd.yml` writes the tags (awk, in place) on one rolling `gitops/bump-<env>` branch and opens a PR (staging: auto-merged when CI passes; prod: manual review). Branch protection is not relaxed | Decided |
 | D-37 | 2026-11-19 | Leagues and the first ADMIN come from the api image's seed, run as a second initContainer; the admin password is a per-environment `random_password` in Key Vault | Decided |
+| D-38 | 2026-11-21 | Move from Azure to the AWS Learner Lab (Azure credits denied): EKS with `LabRole`, RDS PostgreSQL, SSM Parameter Store + External Secrets, an Elastic IP + nip.io for the ingress; S3 state with native locking. Supersedes D-02 and the Azure-specific parts of later decisions | Decided (in progress) |
 
 ## 2. Details
 
@@ -186,6 +187,17 @@ The app repos send the new tags with `repository_dispatch`, and `cd.yml` here wr
 
 ### D-37 · Seed initContainer and admin password in Key Vault
 A fresh cluster database had no `liga` rows, so every ingesta run failed (`LigaNoSembradaError`), and no ADMIN to call `/api/ingestas/ejecutar` or `/api/modelos/reentrenar`. The database is private to the VNet and the production image had no `tsx`, so `pnpm db:seed` could not reach it. The api image now ships the seed as `dist/seed.js` (backend D-37), and the chart runs it as a second initContainer after `migrate`. It only inserts missing rows, and a race between two pods is retried. Terraform generates `seed-admin-password-<env>` (32 chars) like the JWT secrets; only the `seed` container gets it as env. Read it with `az keyvault secret show`. **Limit:** rotating the secret does not change the existing user's password, because the seed never updates rows. Change it through the API instead. **Rejected:** a hook Job (one more ordering rule next to the smoke hook) and a manual Job (a step to forget on every new environment).
+
+### D-38 · Azure → AWS Learner Lab
+We were denied Azure for Students and the Azure free credits, and the course does not require Azure. The team has an AWS Academy Learner Lab (USD 50 budget, us-east-1 only, session credentials that expire, no new IAM roles or OIDC providers: only the pre-created `LabRole` and `LabInstanceProfile`). Checked on 2026-11-21: `LabRole` is trusted by `eks` and `ec2` and has the EKS cluster and worker policies, ECR read-only and `AmazonSSMManagedInstanceCore`; t3.medium and t3.large are allowed, t3.xlarge is not; EKS 1.34–1.37 are in standard support; PostgreSQL 16 on db.t3.micro is offered. The lab denies reading its own policies, so pod networking (VPC CNI) under `LabRole` is confirmed on the first apply.
+
+The mapping, landed in steps:
+- **State:** S3 bucket `statline-tfstate-<account>` with versioning, SSE-S3, public access blocked and native locking (`use_lockfile`, Terraform ≥ 1.10), in the bootstrap stack.
+- **Ingress address:** an Elastic IP in the bootstrap stack, so it survives `make destroy` of principal and the nip.io hosts (`staging.<ip>.nip.io`, `<ip>.nip.io`) never change. About USD 3.60/month idle.
+- **Credentials:** `make creds` writes the lab keys to the `statline-lab` profile (never `[default]`) and to the `AWS_*` secrets of this repo for CI.
+- **Next:** EKS (LabRole as cluster and node role) replaces AKS, RDS replaces the Flexible Server, SSM SecureStrings + External Secrets replace Key Vault + CSI, CloudWatch replaces Log Analytics, and the `dns` module goes away.
+
+**Rejected:** a new Azure free account (credits denied), k3s on EC2 (not a managed cluster), Terraform-written Kubernetes Secrets (no secret store outside the cluster).
 
 ## 3. Known limitations
 

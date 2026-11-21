@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# Writes terraform/principal/backend.hcl from the bootstrap outputs (no secrets: Entra ID auth).
+# Writes terraform/principal/backend.hcl (gitignored) from the bootstrap outputs. No secrets:
+# the S3 backend uses the lab credentials (AWS_PROFILE locally, AWS_* env vars in CI).
 set -euo pipefail
 
-out() { terraform -chdir=terraform/bootstrap output -raw "$1"; }
+bucket="$(terraform -chdir=terraform/bootstrap output -raw state_bucket 2>/dev/null)" || bucket=""
+[[ -n "$bucket" ]] || {
+  echo "error: no state_bucket output; run make bootstrap (or import the bucket, see README)" >&2
+  exit 1
+}
+region="$(terraform -chdir=terraform/bootstrap output -raw region)"
 
 target=terraform/principal/backend.hcl
-echo "Writing $target from the bootstrap state"
-cat > "$target" <<HCL
-resource_group_name  = "$(out resource_group_name)"
-storage_account_name = "$(out storage_account_name)"
-container_name       = "$(out container_name)"
-HCL
+printf 'bucket       = "%s"\nkey          = "principal.tfstate"\nregion       = "%s"\nuse_lockfile = true\nencrypt      = true\n' \
+  "$bucket" "$region" > "$target"
+echo "Wrote $target" >&2
 cat "$target"
