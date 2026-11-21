@@ -1,45 +1,11 @@
-# seguridad: Key Vault with Azure RBAC (no access policies) holding the application secrets.
-# Secret names are a contract with the backend and the SecretProviderClass (docs/ARCHITECTURE.md §3).
-# Values are generated here or copied from datos; api-sports-key is a placeholder set out of band.
-
-data "azurerm_client_config" "current" {}
+# seguridad: application secrets as SSM Parameter Store SecureStrings (default aws/ssm key, no
+# cost). External Secrets syncs them into the Secret statline-secrets of each namespace, reading
+# with the nodes' LabRole credentials (D-38). Names are a contract with the chart
+# (secrets.external.parameters, docs/ARCHITECTURE.md §3). The API keys are placeholders set out of
+# band (`aws ssm put-parameter --overwrite`, RUNBOOK §2.2) and never overwritten by Terraform.
 
 locals {
   environments = toset(["staging", "prod"])
-}
-
-resource "azurerm_key_vault" "main" {
-  name                = "kv-${var.name}-${var.suffix}"
-  resource_group_name = var.resource_group_name
-  location            = var.location
-  tenant_id           = data.azurerm_client_config.current.tenant_id
-  sku_name            = "standard"
-
-  rbac_authorization_enabled    = true
-  soft_delete_retention_days    = 7
-  purge_protection_enabled      = false # Students re-create the stack often; see DECISIONS D-18.
-  public_network_access_enabled = true  # AKS CSI reads over the public endpoint (D-18).
-
-  network_acls {
-    default_action = "Allow"
-    bypass         = "AzureServices"
-  }
-
-  tags = var.tags
-}
-
-# Terraform writes the secrets as the deployer, so it needs data-plane write access.
-resource "azurerm_role_assignment" "deployer_secrets_officer" {
-  scope                = azurerm_key_vault.main.id
-  role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = data.azurerm_client_config.current.object_id
-}
-
-# The Secrets Store CSI add-on (module aks) reads the secrets into the pods.
-resource "azurerm_role_assignment" "csi_secrets_user" {
-  scope                = azurerm_key_vault.main.id
-  role_definition_name = "Key Vault Secrets User"
-  principal_id         = var.csi_identity_object_id
 }
 
 resource "random_password" "jwt_secret" {
@@ -54,79 +20,37 @@ resource "random_password" "jwt_refresh_secret" {
   special  = false
 }
 
-# First ADMIN of each environment, created by the api seed initContainer (backend D-37). Read it
-# with `az keyvault secret show --vault-name <kv> -n seed-admin-password-<env> --query value -o tsv`.
+# First ADMIN of each environment (backend D-37).
 resource "random_password" "seed_admin" {
   for_each = local.environments
   length   = 32
   special  = false
 }
 
-resource "azurerm_key_vault_secret" "database_url" {
-  for_each     = local.environments
-  name         = "database-url-${each.key}"
-  value        = var.database_urls[each.key]
-  key_vault_id = azurerm_key_vault.main.id
-  content_type = "postgresql-connection-string"
-
-  depends_on = [azurerm_role_assignment.deployer_secrets_officer]
+locals {
+  por_ambiente = merge([
+    for env in local.environments : {
+      "${env}/database-url"        = var.database_urls[env]
+      "${env}/jwt-secret"          = random_password.jwt_secret[env].result
+      "${env}/jwt-refresh-secret"  = random_password.jwt_refresh_secret[env].result
+      "${env}/seed-admin-password" = random_password.seed_admin[env].result
+    }
+  ]...)
 }
 
-resource "azurerm_key_vault_secret" "jwt_secret" {
-  for_each     = local.environments
-  name         = "jwt-secret-${each.key}"
-  value        = random_password.jwt_secret[each.key].result
-  key_vault_id = azurerm_key_vault.main.id
-  content_type = "text/plain"
-
-  depends_on = [azurerm_role_assignment.deployer_secrets_officer]
+resource "aws_ssm_parameter" "ambiente" {
+  for_each = nonsensitive(toset(keys(local.por_ambiente)))
+  name     = "${var.prefix}/${each.key}"
+  type     = "SecureString"
+  value    = local.por_ambiente[each.key]
 }
 
-resource "azurerm_key_vault_secret" "jwt_refresh_secret" {
-  for_each     = local.environments
-  name         = "jwt-refresh-secret-${each.key}"
-  value        = random_password.jwt_refresh_secret[each.key].result
-  key_vault_id = azurerm_key_vault.main.id
-  content_type = "text/plain"
-
-  depends_on = [azurerm_role_assignment.deployer_secrets_officer]
-}
-
-resource "azurerm_key_vault_secret" "seed_admin_password" {
-  for_each     = local.environments
-  name         = "seed-admin-password-${each.key}"
-  value        = random_password.seed_admin[each.key].result
-  key_vault_id = azurerm_key_vault.main.id
-  content_type = "text/plain"
-
-  depends_on = [azurerm_role_assignment.deployer_secrets_officer]
-}
-
-# Placeholder only: the real API-Sports key is set in the portal or with `az keyvault secret set`,
-# and Terraform never overwrites it afterwards.
-resource "azurerm_key_vault_secret" "api_sports_key" {
-  name         = "api-sports-key"
-  value        = "set-me"
-  key_vault_id = azurerm_key_vault.main.id
-  content_type = "text/plain"
-
-  depends_on = [azurerm_role_assignment.deployer_secrets_officer]
-
-  lifecycle {
-    ignore_changes = [value]
-  }
-}
-
-# Placeholder like api-sports-key: the chart mounts BALLDONTLIE_API_KEY from this secret, so it must
-# exist or the CSI volume fails to mount. "set-me" is harmless while FALLBACK_HABILITADO is false
-# (the chart default); set the real key out of band before turning the fallback on.
-resource "azurerm_key_vault_secret" "balldontlie_api_key" {
-  name         = "balldontlie-api-key"
-  value        = "set-me"
-  key_vault_id = azurerm_key_vault.main.id
-  content_type = "text/plain"
-
-  depends_on = [azurerm_role_assignment.deployer_secrets_officer]
+# Shared by both environments. "set-me" is harmless while FALLBACK_HABILITADO is false.
+resource "aws_ssm_parameter" "comun" {
+  for_each = toset(["api-sports-key", "balldontlie-api-key"])
+  name     = "${var.prefix}/comun/${each.key}"
+  type     = "SecureString"
+  value    = "set-me"
 
   lifecycle {
     ignore_changes = [value]

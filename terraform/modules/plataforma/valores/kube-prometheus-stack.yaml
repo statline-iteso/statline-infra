@@ -1,6 +1,6 @@
-# kube-prometheus-stack trimmed for 2 x Standard_B2s (2 vCPU / 4 GiB each, shared with the apps).
+# kube-prometheus-stack trimmed for 2 x t3.medium (2 vCPU / 4 GiB each, shared with the apps).
 # Prometheus keeps 3 days in emptyDir (node disk) (no PVC, no disk cost; history is lost on
-# restart). Alertmanager is off. Components AKS does not expose (etcd, controller-manager,
+# restart). Alertmanager is off. Components EKS does not expose (etcd, controller-manager,
 # scheduler, kube-proxy) are off so they do not show as down targets.
 defaultRules:
   rules:

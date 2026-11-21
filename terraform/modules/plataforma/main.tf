@@ -1,6 +1,7 @@
-# plataforma: the namespaces of the cluster and the four platform charts (SL-12). Redis is not a
-# chart here: it is our own StatefulSet in the GitOps chart (DECISIONS D-20). ClusterIssuers are
-# not here either: they live in gitops/ and Argo CD applies them (DECISIONS D-22).
+# plataforma: the namespaces of the cluster, the platform charts (SL-12) and External Secrets
+# (D-38), and the Job that creates the application databases. Redis is not a chart here: it is our
+# own StatefulSet in the GitOps chart (DECISIONS D-20). ClusterIssuers and the ClusterSecretStore
+# are not here either: they live in gitops/plataforma and Argo CD applies them (DECISIONS D-22).
 
 locals {
   ambientes = {
@@ -51,8 +52,7 @@ resource "helm_release" "ingress_nginx" {
   namespace  = kubernetes_namespace.ambiente["plataforma"].metadata[0].name
 
   values = [templatefile("${path.module}/valores/ingress-nginx.yaml", {
-    nombre_ip     = var.ingress_public_ip_name
-    grupo_recurso = var.resource_group_name
+    eip_allocation_id = var.ingress_eip_allocation_id
   })]
 
   depends_on = [helm_release.kube_prometheus_stack]
@@ -79,4 +79,94 @@ resource "helm_release" "argo_cd" {
   namespace  = kubernetes_namespace.ambiente["plataforma"].metadata[0].name
 
   values = [templatefile("${path.module}/valores/argo-cd.yaml", {})]
+}
+
+# Syncs SSM parameters into Kubernetes Secrets (ExternalSecret in the GitOps chart). It authenticates
+# with the node's LabRole through IMDS: no IRSA in the lab (D-38). Needs the ServiceMonitor CRD.
+resource "helm_release" "external_secrets" {
+  name       = "external-secrets"
+  repository = "https://charts.external-secrets.io"
+  chart      = "external-secrets"
+  version    = var.chart_external_secrets
+  namespace  = kubernetes_namespace.ambiente["plataforma"].metadata[0].name
+
+  values = [templatefile("${path.module}/valores/external-secrets.yaml", {})]
+
+  depends_on = [helm_release.kube_prometheus_stack]
+}
+
+# RDS only creates the server: this Job creates statline_<env> when missing (idempotent). It runs
+# in plataforma, which has no NetworkPolicies, and reaches RDS through the cluster security group.
+# The name carries a hash of the endpoint, so a new server gets a new Job.
+resource "kubernetes_secret_v1" "db_admin" {
+  metadata {
+    name      = "statline-db-admin"
+    namespace = kubernetes_namespace.ambiente["plataforma"].metadata[0].name
+  }
+  data = {
+    ADMIN_URL = var.db_admin_url
+  }
+}
+
+resource "kubernetes_job_v1" "crear_bases" {
+  metadata {
+    name      = "crear-bases-${substr(sha1(var.db_address), 0, 8)}"
+    namespace = kubernetes_namespace.ambiente["plataforma"].metadata[0].name
+  }
+
+  spec {
+    backoff_limit = 6
+    template {
+      metadata {
+        labels = { "app.kubernetes.io/name" = "crear-bases" }
+      }
+      spec {
+        restart_policy                  = "OnFailure"
+        automount_service_account_token = false
+        security_context {
+          run_as_non_root = true
+          run_as_user     = 70 # postgres user of the alpine image
+          seccomp_profile {
+            type = "RuntimeDefault"
+          }
+        }
+        container {
+          name    = "psql"
+          image   = "postgres:16-alpine"
+          command = ["sh", "-ec"]
+          args = [<<-SH
+            for db in ${join(" ", var.bases_de_datos)}; do
+              if psql "$ADMIN_URL" -tAc "SELECT 1 FROM pg_database WHERE datname = '$db'" | grep -q 1; then
+                echo "$db exists"
+              else
+                psql "$ADMIN_URL" -c "CREATE DATABASE $db" && echo "$db created"
+              fi
+            done
+          SH
+          ]
+          env_from {
+            secret_ref {
+              name = kubernetes_secret_v1.db_admin.metadata[0].name
+            }
+          }
+          resources {
+            requests = { cpu = "10m", memory = "32Mi" }
+            limits   = { memory = "64Mi" }
+          }
+          security_context {
+            allow_privilege_escalation = false
+            read_only_root_filesystem  = true
+            capabilities {
+              drop = ["ALL"]
+            }
+          }
+        }
+      }
+    }
+  }
+
+  wait_for_completion = true
+  timeouts {
+    create = "10m"
+  }
 }

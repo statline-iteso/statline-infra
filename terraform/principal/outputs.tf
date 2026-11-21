@@ -1,61 +1,41 @@
-output "resource_group_name" {
-  description = "Main resource group."
-  value       = azurerm_resource_group.main.name
+output "region" {
+  description = "AWS region of the stack."
+  value       = var.region
 }
 
-output "aks_cluster_name" {
-  description = "az aks get-credentials -g <resource_group_name> -n <this>"
-  value       = module.aks.cluster_name
+output "cluster_name" {
+  description = "aws eks update-kubeconfig --name <this> --alias eks-statline (make kubeconfig)."
+  value       = module.eks.cluster_name
 }
 
-output "aks_oidc_issuer_url" {
-  description = "OIDC issuer for workload identity."
-  value       = module.aks.oidc_issuer_url
+output "ingress_ip" {
+  description = "Elastic IP of the ingress NLB (bootstrap). Hosts: staging.<ip>.nip.io and <ip>.nip.io."
+  value       = data.aws_eip.ingress.public_ip
 }
 
-output "key_vault_csi_identity_client_id" {
-  description = "userAssignedIdentityID for the SecretProviderClass (SL-58)."
-  value       = module.aks.key_vault_csi_identity_client_id
+output "ssm_prefix" {
+  description = "SSM prefix of the app secrets: <prefix>/<env>/<name>, <prefix>/comun/<name>."
+  value       = module.seguridad.prefix
 }
 
-output "postgres_fqdn" {
-  description = "Private FQDN of PostgreSQL."
-  value       = module.datos.server_fqdn
+output "ssm_parameters" {
+  description = "Every SSM parameter Terraform manages."
+  value       = module.seguridad.parameter_names
 }
 
-output "key_vault_name" {
-  description = "Key Vault with the app secrets (database-url-<env>, jwt-secret-<env>, jwt-refresh-secret-<env>, api-sports-key)."
-  value       = module.seguridad.key_vault_name
+output "postgres_address" {
+  description = "Private DNS name of RDS PostgreSQL."
+  value       = module.datos.address
 }
 
-output "key_vault_uri" {
-  description = "Key Vault URI (keyVaultName / vault URL for the SecretProviderClass, SL-58)."
-  value       = module.seguridad.key_vault_uri
+output "postgres_private_cidrs" {
+  description = "Private subnet CIDRs: networkPolicies.postgresCidr in the GitOps values."
+  value       = module.red.private_cidrs
 }
 
-output "tenant_id" {
-  description = "Entra tenant id for the SecretProviderClass (SL-58)."
-  value       = module.seguridad.tenant_id
-}
-
-output "log_analytics_workspace_id" {
-  description = "Log Analytics workspace id (log-statline)."
-  value       = module.observabilidad.log_analytics_workspace_id
-}
-
-output "log_analytics_workspace_name" {
-  description = "Log Analytics workspace name; query it with az monitor log-analytics query."
-  value       = module.observabilidad.log_analytics_workspace_name
-}
-
-output "ingress_public_ip" {
-  description = "Static public IP of the ingress-nginx load balancer (point DNS here, or use it when no domain is set)."
-  value       = azurerm_public_ip.ingress.ip_address
-}
-
-output "dns_name_servers" {
-  description = "Name servers of the DNS zone to delegate at the registrar. Null when dominio is not set."
-  value       = one(module.dns[*].name_servers)
+output "log_groups" {
+  description = "CloudWatch log groups (EKS control plane, RDS)."
+  value       = module.observabilidad.log_groups
 }
 
 output "grafana_admin_password" {

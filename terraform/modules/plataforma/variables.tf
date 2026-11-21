@@ -1,11 +1,28 @@
-variable "ingress_public_ip_name" {
+variable "ingress_eip_allocation_id" {
   type        = string
-  description = "Name of the static public IP resource (service.beta.kubernetes.io/azure-pip-name)."
+  description = "Elastic IP of the ingress NLB (bootstrap stack; service.beta.kubernetes.io/aws-load-balancer-eip-allocations)."
 }
 
-variable "resource_group_name" {
+variable "db_address" {
   type        = string
-  description = "Resource group of the static public IP (service.beta.kubernetes.io/azure-load-balancer-resource-group)."
+  description = "RDS address (names the database Job)."
+}
+
+variable "db_admin_url" {
+  type        = string
+  description = "Master connection string to the postgres database (module datos)."
+  sensitive   = true
+}
+
+variable "bases_de_datos" {
+  type        = list(string)
+  description = "Databases the Job creates when missing."
+}
+
+variable "chart_external_secrets" {
+  type        = string
+  description = "External Secrets Operator chart version (external-secrets/external-secrets)."
+  default     = "2.14.0"
 }
 
 variable "chart_ingress_nginx" {

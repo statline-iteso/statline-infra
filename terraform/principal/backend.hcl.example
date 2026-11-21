@@ -1,4 +1,0 @@
-# Written by `make backend-config` from the bootstrap outputs. backend.hcl is gitignored.
-resource_group_name  = "rg-statline-tfstate"
-storage_account_name = "ststatlinetfxxxxxx"
-container_name       = "tfstate"
