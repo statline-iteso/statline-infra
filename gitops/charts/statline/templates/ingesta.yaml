@@ -72,8 +72,6 @@ spec:
                 {{- include "statline.containerSecurity" $ | nindent 16 }}
               volumeMounts:
                 {{- include "statline.tmpVolumeMount" $ | nindent 16 }}
-                {{- include "statline.secretVolumeMount" $ | nindent 16 }}
           volumes:
             {{- include "statline.tmpVolume" $ | nindent 12 }}
-            {{- include "statline.secretVolume" $ | nindent 12 }}
 {{- end }}

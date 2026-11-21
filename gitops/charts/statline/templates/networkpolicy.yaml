@@ -84,7 +84,7 @@ Helpers below render peers and rules shared by several policies.
 {{- $rel := .Release.Name }}
 {{- $lanzador := .Values.api.ingestaLanzador }}
 {{- if and (eq $lanzador "kubernetes") (not .Values.networkPolicies.kubeApiCidr) }}
-{{- fail "networkPolicies.kubeApiCidr is required when api.ingestaLanzador is kubernetes (the AKS API server address, as /32)" }}
+{{- fail "networkPolicies.kubeApiCidr is required when api.ingestaLanzador is kubernetes (the EKS API server addresses: kubectl get endpoints kubernetes)" }}
 {{- end }}
 ---
 # Every pod in the namespace: no ingress and no egress unless an allow policy below says so.
@@ -226,7 +226,7 @@ spec:
 {{- if .Values.networkPolicies.allowNodeCidr }}
 ---
 # Optional: node subnet may reach every pod (kubelet probes, if the CNI enforces them). Off by default:
-# Azure NPM and kube-router allow node-to-local-pod traffic on their own.
+# kube-router and the EKS VPC CNI policy agent allow node-to-local-pod traffic on their own.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

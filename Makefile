@@ -84,8 +84,8 @@ tflint: ## tflint with the aws ruleset
 
 # Helm: values files are the environments; the defaults file alone is not renderable (image tags are required).
 VALUES := $(wildcard gitops/charts/statline/values-*.yaml)
-K8S_VERSION := 1.30.6
-# Built-in schemas, then the datree CRDs catalog (SecretProviderClass, ClusterIssuer, Argo CD).
+K8S_VERSION := 1.35.0
+# Built-in schemas, then the datree CRDs catalog (ExternalSecret, ClusterSecretStore, ClusterIssuer, Argo CD).
 KUBECONFORM_FLAGS := -strict -summary -ignore-missing-schemas -kubernetes-version $(K8S_VERSION) \
 	-schema-location default \
 	-schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'

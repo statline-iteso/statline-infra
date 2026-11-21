@@ -87,10 +87,8 @@ spec:
           # Model artifacts are cached under /tmp (the models themselves live in PostgreSQL).
           volumeMounts:
             {{- include "statline.tmpVolumeMount" . | nindent 12 }}
-            {{- include "statline.secretVolumeMount" . | nindent 12 }}
       volumes:
         {{- include "statline.tmpVolume" . | nindent 8 }}
-        {{- include "statline.secretVolume" . | nindent 8 }}
 ---
 apiVersion: v1
 kind: Service

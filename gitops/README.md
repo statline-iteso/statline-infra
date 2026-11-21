@@ -40,12 +40,10 @@ helm template statline gitops/charts/statline -f gitops/charts/statline/values-s
    kubectl apply -f gitops/argocd/project.yaml -f gitops/argocd/root.yaml
    ```
 2. `root` watches `gitops/argocd/apps` on `develop`. It creates the four Applications.
-3. Each Application syncs its path with automated prune and self-heal, retries with backoff, and never creates namespaces (`CreateNamespace=false`). The namespaces come from `make k3d-up` locally and from ops in Azure.
+3. Each Application syncs its path with automated prune and self-heal, retries with backoff, and never creates namespaces (`CreateNamespace=false`). The namespaces come from `make k3d-up` locally and from Terraform (`modules/plataforma`) on EKS.
 4. `statline-staging` tracks `develop` and `statline-prod` tracks `main`. A merge to `develop` changes staging. Prod changes arrive through `release/*` into `main`.
 
-Before the first sync, fill the placeholders:
-- `values-staging.yaml` and `values-prod.yaml`: the ingress host (`staging.<dominio>`, `<dominio>`), `secrets.csi.keyvaultName`, `tenantId`, `userAssignedIdentityID` (from `terraform/principal` outputs).
-- `plataforma/cluster-issuers.yaml`: the contact email.
+Before the first sync, check `ingress.host` in `values-staging.yaml` and `values-prod.yaml`: `staging.<ip>.nip.io` and `<ip>.nip.io`, with `<ip>` the bootstrap Elastic IP (`terraform -chdir=terraform/bootstrap output -raw ingress_ip`). It only changes if the lab account (and so the Elastic IP) changes. The ClusterIssuers have no contact email on purpose: it is optional in ACME.
 
 ## Test on k3d
 
@@ -68,11 +66,11 @@ The dev Postgres is ephemeral: `make k3d-deploy` with a fresh cluster runs the a
 
 ## Secrets
 
-Staging and prod use `secrets.mode: csi`. The SecretProviderClass `statline-kv` syncs Key Vault into the Secret `statline-secrets`. Its keys are the env var names (`DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY`, `SEED_ADMIN_PASSWORD`), and the Key Vault names are in `secrets.csi.objects`. k3d uses `secrets.mode: plain` with fake values. Never put a real value in a values file.
+Staging and prod use `secrets.mode: external` (D-38). An `ExternalSecret` (sync wave -1) asks External Secrets to build the Secret `statline-secrets` from SSM Parameter Store, through the ClusterSecretStore `statline-ssm` in `gitops/plataforma/`. External Secrets is installed by Terraform and reads SSM with the nodes' `LabRole`, since the Learner Lab allows no IRSA. The Secret keys are the env var names (`DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY`, `SEED_ADMIN_PASSWORD`), and the parameter names are in `secrets.external.parameters` (`/statline/<env>/<name>`, `/statline/comun/<name>`). k3d uses `secrets.mode: plain` with fake values. Never put a real value in a values file.
 
 `SEED_ADMIN_PASSWORD` reaches only the api `seed` initContainer, which creates the leagues and the first ADMIN after the migrations (D-37).
 
-The synced Secret exists only while a pod mounts the CSI volume. Every pod that reads it (including the api migrate initContainer and the CronJobs) mounts the volume; kubelet mounts volumes before it resolves container env, so there is no deadlock. `BALLDONTLIE_API_KEY` is `optional` in the pod spec, but its Key Vault object must exist. `api.ingestaLanzador: kubernetes` adds the Role and RoleBinding for on-demand ingestion Jobs; `ingesta.config.fallbackHabilitado` stays `"false"` in staging and prod.
+The Secret is a normal Kubernetes Secret, owned by the `ExternalSecret` and refreshed every hour. Pods read it as env, so after changing a parameter (for example the real `api-sports-key`) restart the workloads, or the CronJobs pick it up on their next run. `BALLDONTLIE_API_KEY` is `optional` in the pod spec, but its SSM parameter must exist, or the sync fails. Limit: one node role for every pod, so either namespace could read the other environment's parameters; the ClusterSecretStore only admits the two app namespaces. `api.ingestaLanzador: kubernetes` adds the Role and RoleBinding for on-demand ingestion Jobs; `ingesta.config.fallbackHabilitado` stays `"false"` in staging and prod.
 
 ## Not here yet
 
