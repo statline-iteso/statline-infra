@@ -21,7 +21,7 @@ spec:
           for: 10m
           labels:
             severity: critical
-            part-of: statline
+            part_of: statline
           annotations:
             summary: "api 5xx ratio above threshold in {{ "{{ $labels.namespace }}" }}"
             description: "5xx share of api requests is {{ "{{ $value | humanizePercentage }}" }} (threshold {{ $a.api5xxRatio }})."
@@ -32,7 +32,7 @@ spec:
           for: 10m
           labels:
             severity: warning
-            part-of: statline
+            part_of: statline
           annotations:
             summary: "api p95 latency above {{ $a.apiP95Seconds }}s in {{ "{{ $labels.namespace }}" }}"
             description: "api p95 latency is {{ "{{ $value | humanizeDuration }}" }}."
@@ -43,7 +43,7 @@ spec:
           for: 5m
           labels:
             severity: critical
-            part-of: statline
+            part_of: statline
           annotations:
             summary: "predicciones target down in {{ "{{ $labels.namespace }}" }}"
             description: "Prometheus cannot scrape predicciones /metrics for {{ "{{ $labels.job }}" }} (instance {{ "{{ $labels.instance }}" }})."
@@ -59,7 +59,7 @@ spec:
           for: 0m
           labels:
             severity: warning
-            part-of: statline
+            part_of: statline
           annotations:
             summary: "ingesta Job failed: {{ "{{ $labels.job_name }}" }}"
             description: "Job {{ "{{ $labels.job_name }}" }} of CronJob {{ "{{ $labels.owner_name }}" }} in {{ "{{ $labels.namespace }}" }} failed."
@@ -75,7 +75,7 @@ spec:
           for: 0m
           labels:
             severity: warning
-            part-of: statline
+            part_of: statline
           annotations:
             summary: "no successful ingesta-basquetbol run in {{ $a.ingestaStaleHours }}h"
             description: "CronJob {{ "{{ $labels.cronjob }}" }} in {{ "{{ $labels.namespace }}" }} has no successful run in the last {{ $a.ingestaStaleHours }} hours (or has never succeeded)."
