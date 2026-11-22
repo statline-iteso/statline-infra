@@ -83,6 +83,8 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 
 ## E2 · Infraestructura con Terraform
 
+> **Movida a AWS (2026-11-21, D-38, [#50](https://github.com/statline-iteso/statline-infra/issues/50)).** Se negaron los créditos de Azure, así que las issues de esta épica se cerraron en Azure y después se rehicieron en AWS Learner Lab, sin issue nueva por módulo: `aks` pasó a `eks` (EKS 1.35, `LabRole`, 2 × t3.medium fijos), la Flexible Server a RDS db.t3.micro, Key Vault y el CSI driver (SL-09, SL-58) a SSM Parameter Store y External Secrets, Log Analytics (SL-10) a CloudWatch, el estado (SL-11) a S3 con bloqueo nativo, y la IP del ingress (SL-12) a una IP elástica con nip.io; el módulo `dns` se eliminó. Los criterios de abajo quedan como se aceptaron en Azure.
+
 ### ✅ [SL-05](https://github.com/statline-iteso/statline-infra/issues/3) · Módulo bootstrap: resource group, storage account y contenedor de estado
 
 **Sprint:** S1 · **Points:** 5 · **Priority:** Crítica · **Repo:** `statline-infra`
@@ -612,7 +614,7 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 
 **Acceptance criteria**
 
-- [ ] Capturas de AKS, Argo CD, Grafana y pruebas de humo
+- [ ] Capturas de EKS, Argo CD, Grafana y pruebas de humo
 - [x] Runbook de alta y baja del ambiente ([RUNBOOK.md](RUNBOOK.md), secciones 1–3 y 8)
 
 ### ⏳ [SL-61](https://github.com/statline-iteso/statline-infra/issues/20) · Entrega final y defensa del proyecto

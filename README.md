@@ -3,7 +3,7 @@
 Infrastructure for **StatLine**, a web platform for unified sports statistics and performance forecasts across three leagues: **NBA** (basketball), **NFL** (American football) and **Liga MX** (football). Scheduled jobs pull games and box scores from API-Sports, a REST API serves comparisons and standings, and a Python service produces match-outcome probabilities and player projections.
 
 This repo holds:
-- **Terraform** for every Azure resource: `bootstrap` (state storage) and `principal` (network, AKS, PostgreSQL, Key Vault, Log Analytics, ingress IP, platform Helm releases; DNS when a domain is set)
+- **Terraform** for every AWS resource (Learner Lab, D-38): `bootstrap` (S3 state bucket, ingress Elastic IP) and `principal` (VPC, EKS, RDS PostgreSQL, SSM parameters, CloudWatch logs, platform Helm releases)
 - the `make` targets that bootstrap state, plan and apply
 - a **k3d** setup for testing the Kubernetes manifests locally
 - the **GitOps** charts (`gitops/charts/statline`, `gitops/charts/redis`) and the Argo CD applications that deploy the four images
@@ -26,7 +26,7 @@ Cada mañana el CronJob `ingesta-basquetbol` consulta API-Sports, normaliza los 
 
 ![Diagrama de la solución](docs/solucion.png)
 
-Verde: implementado (aún sin aplicar en Azure). Línea punteada: opcional o respaldo. Fuente editable en [`docs/solucion.mmd`](docs/solucion.mmd) (`make diagram`).
+Verde: implementado (aún sin aplicar en AWS). Línea punteada: opcional o respaldo. Fuente editable en [`docs/solucion.mmd`](docs/solucion.mmd) (`make diagram`).
 
 ### Repositorios
 
@@ -49,16 +49,17 @@ Verde: implementado (aún sin aplicar en Azure). Línea punteada: opcional o res
 
 ### Avance
 
-59 de 61 issues (269 de 277 puntos) están terminados. La primera mitad dejó los cimientos, los módulos de Terraform `bootstrap`, `red`, `aks` y `datos`, la ingesta de NBA, la API con autenticación y el catálogo, y las vistas base del frontend. La segunda mitad agregó Key Vault, Log Analytics, DNS y la plataforma; el chart con Argo CD, Redis, HPA, NetworkPolicies, PDB, monitoreo y pruebas de humo; NFL, Liga MX y los respaldos; el resto de la API; los modelos de predicción; y las vistas de boxscore, comparación, pronósticos, listas y alertas. Faltan SL-60 (desplegar y juntar evidencia) y SL-61 (release y defensa), en [docs/pendientes.md](docs/pendientes.md).
+59 de 61 issues (269 de 277 puntos) están terminados. La primera mitad dejó los cimientos, los módulos de Terraform `bootstrap`, `red`, `aks` y `datos` (en Azure), la ingesta de NBA, la API con autenticación y el catálogo, y las vistas base del frontend. La segunda mitad agregó Key Vault, Log Analytics, DNS y la plataforma, y luego movió la infraestructura de Azure a AWS Learner Lab porque se negaron los créditos de Azure (EKS, RDS, SSM, D-38); el chart con Argo CD, Redis, HPA, NetworkPolicies, PDB, monitoreo y pruebas de humo; NFL, Liga MX y los respaldos; el resto de la API; los modelos de predicción; y las vistas de boxscore, comparación, pronósticos, listas y alertas. Faltan SL-60 (desplegar y juntar evidencia) y SL-61 (release y defensa), en [docs/pendientes.md](docs/pendientes.md).
 
 ### Cómo correrlo
 
 | Situación | Comandos | Tiempo |
 |---|---|---|
-| Suscripción nueva (una vez) | `az login` → `make bootstrap` | ~3 min |
-| Infraestructura en Azure | `cp terraform/principal/terraform.tfvars.example terraform/principal/principal.auto.tfvars` → `make plan` → `make apply` | ~15 min |
-| Al terminar | `make destroy` (AKS + PostgreSQL consumen crédito de Azure for Students) | ~10 min |
-| Sin Azure | backend: `docker compose up -d --wait` y `pnpm --filter @statline/api dev` en su repo; frontend: `pnpm dev` | 2 min |
+| Sesión del lab (cada vez) | `make creds` (pega el bloque de AWS Details) | 1 min |
+| Cuenta del lab nueva (una vez) | `make bootstrap` | ~3 min |
+| Infraestructura en AWS | `make apply-eks` → `make plan` → `make apply` → `make kubeconfig` | ~25 min |
+| Al terminar | `make destroy` (EKS, nodos, RDS y el NLB cuestan ~USD 0.30/h del presupuesto de USD 50) | ~15 min |
+| Sin AWS | backend: `docker compose up -d --wait` y `pnpm --filter @statline/api dev` en su repo; frontend: `pnpm dev` | 2 min |
 | Clúster local | `make k3d-up` / `make k3d-down` | ~2 min |
 
 ### Documentación de planeación
@@ -69,22 +70,22 @@ Roadmap por área y bitácora del proyecto: [resumen](docs/planning/README.md) �
 
 | Read | For |
 |---|---|
-| [AGENTS.md](AGENTS.md) | Start here: scope, Azure for Students constraints, stack, commands, repo layout, rules |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Every Azure resource, the cluster layout, CI/CD and GitOps flow, branch strategy |
+| [AGENTS.md](AGENTS.md) | Start here: scope, AWS Learner Lab constraints, stack, commands, repo layout, rules |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Every AWS resource, the cluster layout, CI/CD and GitOps flow, branch strategy |
 | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | How Terraform, manifests, scripts and workflows are written |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | What we decided and why, known limitations, future work |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | Every issue (61), by epic and sprint |
 
 ## Prerequisites
 
-- An **Azure for Students** subscription and the **Azure CLI** (`az login`)
+- An **AWS Academy Learner Lab** (us-east-1, `LabRole`); the lab keys go in with `make creds`
 - **[mise](https://mise.jdx.dev)**, which installs every other CLI at the pinned version (see [Tooling](#tooling))
 - **Docker**, for k3d and for building images
 - **[GitHub CLI](https://cli.github.com)** (`gh`), with access to the three repos
 
 ## Tooling
 
-All CLI versions are pinned in [`mise.toml`](mise.toml): terraform, tflint, kubectl, helm, k3d, azure-cli, shellcheck and pre-commit.
+All CLI versions are pinned in [`mise.toml`](mise.toml): terraform, tflint, kubectl, helm, kubeconform, k3d, aws-cli, shellcheck and pre-commit.
 
 ```bash
 curl https://mise.run | sh        # or: brew install mise / winget install jdx.mise

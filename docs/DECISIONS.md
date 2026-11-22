@@ -9,32 +9,32 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | ID | Date | Decision | Status |
 |---|---|---|---|
 | D-01 | 2026-11-16 | Three repos: infra, backend (api + ingesta + predicciones), frontend | Decided |
-| D-02 | 2026-11-16 | Azure (Azure for Students) + AKS + Terraform | Decided |
+| D-02 | 2026-11-16 | Azure (Azure for Students) + AKS + Terraform | Superseded by D-38 |
 | D-03 | 2026-11-16 | One AKS cluster with `statline-staging` and `statline-prod` namespaces | Decided |
-| D-04 | 2026-11-16 | Terraform state in Azure Storage with Entra ID auth (no account keys) | Decided |
-| D-05 | 2026-11-16 | Plain `azurerm` resources in local modules; no registry modules | Decided |
-| D-06 | 2026-11-16 | PostgreSQL with private access only; firewall rules replaced by the delegated subnet | Decided |
-| D-07 | 2026-11-16 | Burstable SKUs: nodes Standard_B2s (2→4), PostgreSQL B_Standard_B1ms, AKS Free tier | Decided (forced by budget) |
-| D-08 | 2026-11-16 | Azure CNI + Azure network policy (NetworkPolicy enforced without Calico) | Decided |
-| D-09 | 2026-11-16 | Secrets: Key Vault + Secrets Store CSI add-on, synced to one Kubernetes Secret per env | Decided |
+| D-04 | 2026-11-16 | Terraform state in Azure Storage with Entra ID auth (no account keys) | Superseded by D-38 |
+| D-05 | 2026-11-16 | Plain `azurerm` resources in local modules; no registry modules | Decided (`aws` resources since D-38) |
+| D-06 | 2026-11-16 | PostgreSQL with private access only; firewall rules replaced by the delegated subnet | Decided (RDS private subnets since D-38) |
+| D-07 | 2026-11-16 | Burstable SKUs: nodes Standard_B2s (2→4), PostgreSQL B_Standard_B1ms, AKS Free tier | Superseded by D-38 |
+| D-08 | 2026-11-16 | Azure CNI + Azure network policy (NetworkPolicy enforced without Calico) | Superseded by D-38 |
+| D-09 | 2026-11-16 | Secrets: Key Vault + Secrets Store CSI add-on, synced to one Kubernetes Secret per env | Superseded by D-38 |
 | D-10 | 2026-11-16 | GitOps manifests live in this repo under `gitops/` (the "GitOps repository" of the proposal) | Decided |
 | D-11 | 2026-11-16 | Images on Docker Hub (`statline/*`), tags = short SHA, plus `vX.Y.Z` on releases | Decided |
 | D-12 | 2026-11-16 | Prisma migrations run in an initContainer of the api Deployment | Decided |
-| D-13 | 2026-11-16 | k3d (k3s 1.30) for local clusters, Traefik disabled in favor of ingress-nginx | Decided |
+| D-13 | 2026-11-16 | k3d (k3s 1.30) for local clusters, Traefik disabled in favor of ingress-nginx | Decided (k3s 1.35 since D-38) |
 | D-14 | 2026-11-16 | Docs in English; course-delivery sections and domain names in Spanish | Decided |
 | D-15 | 2026-11-16 | `develop` is the default branch; `main` only receives `release/*` and `hotfix/*` | Decided |
-| D-16 | 2026-11-16 | One database per environment (`statline_staging`, `statline_prod`) on the same PostgreSQL server; apps use the admin login | Decided |
-| D-17 | 2026-11-16 | Secrets per environment (`database-url-<env>`, `jwt-*-<env>`); one shared `api-sports-key`, placeholder set out of band | Decided |
-| D-18 | 2026-11-16 | Key Vault with Azure RBAC, Standard SKU, 7-day soft delete, purge protection off, public endpoint with default Allow | Decided |
-| D-19 | 2026-11-16 | Log Analytics with a 0.5 GB/day cap; AKS diagnostics without `kube-audit` (cheap category list) | Decided |
+| D-16 | 2026-11-16 | One database per environment (`statline_staging`, `statline_prod`) on the same PostgreSQL server; apps use the admin login | Decided (databases from a Job since D-38) |
+| D-17 | 2026-11-16 | Secrets per environment (`database-url-<env>`, `jwt-*-<env>`); one shared `api-sports-key`, placeholder set out of band | Decided (SSM names since D-38) |
+| D-18 | 2026-11-16 | Key Vault with Azure RBAC, Standard SKU, 7-day soft delete, purge protection off, public endpoint with default Allow | Superseded by D-38 |
+| D-19 | 2026-11-16 | Log Analytics with a 0.5 GB/day cap; AKS diagnostics without `kube-audit` (cheap category list) | Superseded by D-38 |
 | D-20 | 2026-11-16 | Platform Helm releases are four (ingress-nginx, cert-manager, Argo CD, kube-prometheus-stack). Redis is our own StatefulSet in the GitOps chart, not a Bitnami release (proposal said five) | Decided |
-| D-21 | 2026-11-16 | The domain is decided at deploy time (`dominio`, default null). The `dns` module exists only when it is set | Decided |
+| D-21 | 2026-11-16 | The domain is decided at deploy time (`dominio`, default null). The `dns` module exists only when it is set | Superseded by D-38 |
 | D-22 | 2026-11-16 | cert-manager ClusterIssuers live in `gitops/` and are applied by Argo CD, not by `kubernetes_manifest` in Terraform (which needs a live cluster at plan time) | Decided |
-| D-23 | 2026-11-16 | Ingress public IP is a static Standard `azurerm_public_ip` in `rg-statline`, used by ingress-nginx through Azure annotations; the AKS identity gets Network Contributor on that resource group | Decided |
-| D-24 | 2026-11-16 | `kubernetes` (~> 2.33) and `helm` (~> 2.16) providers configured from `module.aks.kube_config` in the same stack; first apply creates the cluster alone (`make apply-aks`) | Decided |
+| D-23 | 2026-11-16 | Ingress public IP is a static Standard `azurerm_public_ip` in `rg-statline`, used by ingress-nginx through Azure annotations; the AKS identity gets Network Contributor on that resource group | Superseded by D-38 |
+| D-24 | 2026-11-16 | `kubernetes` (~> 2.33) and `helm` (~> 2.16) providers configured from `module.aks.kube_config` in the same stack; first apply creates the cluster alone (`make apply-aks`) | Decided (`module.eks`, `make apply-eks` since D-38) |
 | D-25 | 2026-11-16 | Platform charts pinned: ingress-nginx 4.15.1, cert-manager v1.21.3, argo-cd 10.11.6, kube-prometheus-stack 92.16.0 (all released at least two weeks before the decision) | Decided |
 | D-26 | 2026-11-16 | Redis as our own StatefulSet chart (`gitops/charts/redis`), not Bitnami | Decided |
-| D-27 | 2026-11-16 | `secrets.mode`: `csi` for staging and prod, `plain` only for k3d | Decided |
+| D-27 | 2026-11-16 | `secrets.mode`: `csi` for staging and prod, `plain` only for k3d | Superseded by D-38 (`external`) |
 | D-28 | 2026-11-16 | Dev PostgreSQL inside the cluster, only with `values-k3d.yaml` | Decided |
 | D-29 | 2026-11-16 | Chart at `gitops/charts/statline` (not `gitops/chart`); app label scheme with the component in `app.kubernetes.io/name` | Decided |
 | D-30 | 2026-11-16 | Backend contract knobs as chart values; on-demand ingestion RBAC only when `api.ingestaLanzador: kubernetes`; fallback ingestion off in staging and prod | Decided |
@@ -44,8 +44,8 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-34 | 2026-11-16 | No automatic rollback: rollback is a `git revert` of the image-tag bump; `argocd app rollback` only as a temporary stopgap | Decided |
 | D-35 | 2026-11-16 | Argo CD sync retry limit 2 (was 5) in staging and prod, so a failing smoke hook is not re-run six times | Decided |
 | D-36 | 2026-11-19 | App repos only build and push images and send `repository_dispatch`; this repo's `cd.yml` writes the tags (awk, in place) on one rolling `gitops/bump-<env>` branch and opens a PR (staging: auto-merged when CI passes; prod: manual review). Branch protection is not relaxed | Decided |
-| D-37 | 2026-11-19 | Leagues and the first ADMIN come from the api image's seed, run as a second initContainer; the admin password is a per-environment `random_password` in Key Vault | Decided |
-| D-38 | 2026-11-21 | Move from Azure to the AWS Learner Lab (Azure credits denied): EKS with `LabRole`, RDS PostgreSQL, SSM Parameter Store + External Secrets, an Elastic IP + nip.io for the ingress; S3 state with native locking. Supersedes D-02 and the Azure-specific parts of later decisions | Decided (in progress) |
+| D-37 | 2026-11-19 | Leagues and the first ADMIN come from the api image's seed, run as a second initContainer; the admin password is a per-environment `random_password` in Key Vault | Decided (password in SSM since D-38) |
+| D-38 | 2026-11-21 | Move from Azure to the AWS Learner Lab (Azure credits denied): EKS with `LabRole`, RDS PostgreSQL, SSM Parameter Store + External Secrets, an Elastic IP + nip.io for the ingress; S3 state with native locking. Supersedes D-02 and the Azure-specific parts of later decisions | Decided |
 
 ## 2. Details
 
@@ -78,9 +78,11 @@ The proposal says `cd.yml` updates "el repositorio GitOps". Keeping `gitops/` in
 
 The apps connect with the server administrator login. **Limitation:** the same superuser credentials reach both databases, so an app bug in staging could read prod. Per-app roles with least privilege would need the `postgresql` provider (roles and grants managed by Terraform) and are left as future work. Prisma needs DDL rights for its migrations, which is another reason to keep the admin login for now.
 
+**Since D-38:** RDS creates only its initial `postgres` database, and the laptop cannot reach the private instance, so `modules/plataforma` runs a Kubernetes Job (`crear-bases-<hash of the address>`, `postgres:16-alpine`) that creates `statline_staging` and `statline_prod` if missing. A new RDS address renames the Job, so it runs again after every re-create. The master login comes from a Secret in `plataforma` that only the Job reads.
+
 
 ### D-17 · Secrets per environment
-`database-url-<env>`, `jwt-secret-<env>` and `jwt-refresh-secret-<env>` are generated per environment, so a staging token can never validate in prod. `random_password` (64 chars, alphanumeric so they are safe in URLs and env files) generates the JWT values; they are kept in the Terraform state, which is in the Entra-authenticated storage account (D-04). `api-sports-key` is one secret because the API-Sports quota belongs to the account, not to an environment. Its placeholder value is set once in the portal or with `az keyvault secret set`, and `ignore_changes = [value]` stops Terraform from overwriting it.
+`database-url-<env>`, `jwt-secret-<env>` and `jwt-refresh-secret-<env>` are generated per environment, so a staging token can never validate in prod. `random_password` (64 chars, alphanumeric so they are safe in URLs and env files) generates the JWT values; they are kept in the Terraform state, which is in the Entra-authenticated storage account (D-04). `api-sports-key` is one secret because the API-Sports quota belongs to the account, not to an environment. Its placeholder value is set once with `aws ssm put-parameter --overwrite` (RUNBOOK 2.2; Key Vault before D-38), and `ignore_changes = [value]` stops Terraform from overwriting it.
 
 
 ### D-18 · Key Vault settings
@@ -185,8 +187,8 @@ The app repos send the new tags with `repository_dispatch`, and `cd.yml` here wr
 **Rejected:** a branch-protection bypass for `github-actions[bot]`. It is simpler but lets the bot push to `main` with no review and no CI. **Cost:** a deploy waits for one CI run (a few minutes) after the images are pushed. **Rollback** is unchanged: revert the bump PR's squash commit (D-34).
 
 
-### D-37 · Seed initContainer and admin password in Key Vault
-A fresh cluster database had no `liga` rows, so every ingesta run failed (`LigaNoSembradaError`), and no ADMIN to call `/api/ingestas/ejecutar` or `/api/modelos/reentrenar`. The database is private to the VNet and the production image had no `tsx`, so `pnpm db:seed` could not reach it. The api image now ships the seed as `dist/seed.js` (backend D-37), and the chart runs it as a second initContainer after `migrate`. It only inserts missing rows, and a race between two pods is retried. Terraform generates `seed-admin-password-<env>` (32 chars) like the JWT secrets; only the `seed` container gets it as env. Read it with `az keyvault secret show`. **Limit:** rotating the secret does not change the existing user's password, because the seed never updates rows. Change it through the API instead. **Rejected:** a hook Job (one more ordering rule next to the smoke hook) and a manual Job (a step to forget on every new environment).
+### D-37 · Seed initContainer and admin password in the secret store
+A fresh cluster database had no `liga` rows, so every ingesta run failed (`LigaNoSembradaError`), and no ADMIN to call `/api/ingestas/ejecutar` or `/api/modelos/reentrenar`. The database is private to the VNet and the production image had no `tsx`, so `pnpm db:seed` could not reach it. The api image now ships the seed as `dist/seed.js` (backend D-37), and the chart runs it as a second initContainer after `migrate`. It only inserts missing rows, and a race between two pods is retried. Terraform generates `seed-admin-password-<env>` (32 chars) like the JWT secrets; only the `seed` container gets it as env. Read it with `aws ssm get-parameter --with-decryption --name /statline/<env>/seed-admin-password` (it was `seed-admin-password-<env>` in Key Vault before D-38). **Limit:** rotating the secret does not change the existing user's password, because the seed never updates rows. Change it through the API instead. **Rejected:** a hook Job (one more ordering rule next to the smoke hook) and a manual Job (a step to forget on every new environment).
 
 ### D-38 · Azure → AWS Learner Lab
 We were denied Azure for Students and the Azure free credits, and the course does not require Azure. The team has an AWS Academy Learner Lab (USD 50 budget, us-east-1 only, session credentials that expire, no new IAM roles or OIDC providers: only the pre-created `LabRole` and `LabInstanceProfile`). Checked on 2026-11-21: `LabRole` is trusted by `eks` and `ec2` and has the EKS cluster and worker policies, ECR read-only and `AmazonSSMManagedInstanceCore`; t3.medium and t3.large are allowed, t3.xlarge is not; EKS 1.34–1.37 are in standard support; PostgreSQL 16 on db.t3.micro is offered. The lab denies reading its own policies, so pod networking (VPC CNI) under `LabRole` is confirmed on the first apply.
@@ -196,24 +198,35 @@ The mapping, landed in steps:
 - **Ingress address:** an Elastic IP in the bootstrap stack, so it survives `make destroy` of principal and the nip.io hosts (`staging.<ip>.nip.io`, `<ip>.nip.io`) never change. About USD 3.60/month idle.
 - **The state bucket is an `awscc_s3_bucket`** (Cloud Control), not `aws_s3_bucket`: the lab's service control policy denies `s3:GetBucketObjectLockConfiguration`, which every read of `aws_s3_bucket` calls, so the first `make bootstrap` failed after creating the bucket. `scripts/bootstrap-account.sh` runs before each bootstrap plan: it archives a state from another lab account, drops the old `aws_s3_bucket` entry, and imports an existing bucket or Elastic IP, so a failed or lost bootstrap is fixed by running `make bootstrap` again.
 - **Credentials:** `make creds` writes the lab keys to the `statline-lab` profile (never `[default]`) and to the `AWS_*` secrets of this repo for CI.
-- **Next:** EKS (LabRole as cluster and node role) replaces AKS, RDS replaces the Flexible Server, SSM SecureStrings + External Secrets replace Key Vault + CSI, CloudWatch replaces Log Analytics, and the `dns` module goes away.
+- **Cluster:** EKS 1.35 (`upgrade_policy = STANDARD`: extended support bills the control plane at 6×) with `LabRole` as cluster and node role, access entries, and 2 fixed `t3.medium` nodes in one public subnet. The VPC CNI runs with network policies (replaces Azure NPM, D-08) and prefix delegation, and nodes get `maxPods: 110`: without it a t3.medium holds 17 pods and the stack needs about 40. IMDS hop limit 2 lets pods use the node credentials. No NAT gateway: nodes have public IPs. Their security group is the EKS cluster security group (open only to itself), plus the ingress NodePorts that the cloud controller opens for the NLB.
+- **Database:** RDS PostgreSQL 16 on db.t3.micro in two private subnets (RDS needs two AZs), 5432 from the cluster security group only (D-06). Databases from a Job (D-16).
+- **Secrets:** SSM Parameter Store SecureStrings `/statline/<env>/*` and `/statline/comun/*` (D-17), read by External Secrets through a `ClusterSecretStore` that uses the node role; `secrets.mode: external` replaces `csi` (D-27). Key Vault settings (D-18) no longer apply.
+- **Ingress:** the built-in cloud controller creates an NLB for ingress-nginx with `aws-load-balancer-eip-allocations` (replaces D-23). No DNS zone: nip.io (replaces D-21).
+- **Logs:** CloudWatch log groups for the EKS control plane (api, controllerManager, scheduler; no audit, as in D-19) and RDS, 3-day retention, replace Log Analytics.
+- **CI:** the `plan` job uses the lab keys from `make creds` and skips itself when they expired; the lab allows no OIDC provider.
+- **Teardown:** `make destroy` removes the platform charts first and waits for the NLB (`scripts/esperar-nlb.sh`); its network interfaces would otherwise block deleting the VPC.
 
-**Rejected:** a new Azure free account (credits denied), k3s on EC2 (not a managed cluster), Terraform-written Kubernetes Secrets (no secret store outside the cluster).
+Cost while up, list prices: EKS 0.10 + 2 × t3.medium 0.083 + RDS 0.018 + NLB 0.023 + public IPv4 ≈ 0.015 → **about USD 0.31/h**, so the USD 50 covers roughly 150 hours. Check it against the lab's cost readout.
+
+**Rejected:** a new Azure free account (credits denied), k3s on EC2 (not a managed cluster), Terraform-written Kubernetes Secrets (no secret store outside the cluster), the AWS Load Balancer Controller and Cluster Autoscaler (each needs its own IAM role), a NAT gateway (about USD 1/day).
 
 ## 3. Known limitations
 
-- **AKS 1.30** is what the proposal specifies. Check `az aks get-versions -l <region>` before the first apply: if 1.30 is no longer offered in standard support, use the oldest available minor and record it here.
-- `make destroy` deletes the database. Until backups to a storage account exist, dump before destroying.
-- The `plan` job in CI is skipped until the Azure OIDC app registration and the repo secrets exist (docs/pendientes.md).
-- No WAF, no private AKS API server (cost and complexity).
-- Apps use the PostgreSQL admin login for both environments (D-16); per-app roles need the `postgresql` provider.
-- Key Vault has a public endpoint (D-18); private endpoints are out of budget scope.
+- **Learner Lab budget and sessions** (D-38): USD 50 in all, and the keys expire with each session. `make destroy` at the end of every session; `make creds` at the start.
+- `make destroy` deletes the database. There are no backups outside the instance: dump before destroying (RUNBOOK §8).
+- **No node autoscaling:** 2 fixed nodes (3 by hand with `node_count`). Pod HPAs still work inside that capacity.
+- **One availability zone** for nodes and the NLB (one Elastic IP); the control plane and RDS subnets span two.
+- **One IAM role for everything:** every pod that calls AWS uses `LabRole`, so either namespace's ExternalSecret could read the other environment's SSM parameters. The ClusterSecretStore admits only the two app namespaces.
+- **Permissions found on apply:** the lab hides its own policies, so an API it denies shows up only as an `AccessDenied … service control policy` error (D-38 lists the ones seen).
+- The CI `plan` only runs while the lab keys are valid; otherwise it skips with a notice.
+- No WAF, no private API endpoint for the cluster (cost and complexity).
+- Apps use the PostgreSQL master login for both environments (D-16); per-app roles need the `postgresql` provider.
 
 ## 4. Future work
 
 - Separate `statline-gitops` repo if more teams deploy (see D-10).
-- Azure Database for PostgreSQL read replica and zone redundancy (not available on Burstable).
-- Workload identity per Deployment instead of the shared CSI add-on identity.
+- RDS Multi-AZ and automated snapshots kept across destroys (outside the lab budget).
+- IRSA or EKS Pod Identity per workload instead of the shared node role (needs an account that allows new IAM roles).
 - Spot node pool for the CronJobs.
 - Argo CD behind an Ingress with TLS (currently port-forward only, D-25).
 - Persistent Prometheus and Grafana storage (currently emptyDir / none, D-25).
