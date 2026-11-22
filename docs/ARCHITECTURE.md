@@ -7,7 +7,7 @@ What runs where, how it gets there, and the contracts with the backend and front
 ```
                 Internet
                    │ 80/443
-         ┌─────────▼──────────┐  static public IP (rg-statline) + DNS A record (if dominio)
+         ┌─────────▼──────────┐  NLB on the bootstrap Elastic IP; hosts <ip>.nip.io, staging.<ip>.nip.io
          │   ingress-nginx    │  TLS from cert-manager (Let's Encrypt)
          └───┬───────────┬────┘
    /         │           │  /api
@@ -18,56 +18,54 @@ What runs where, how it gets there, and the contracts with the backend and front
                        │     │ Redis
                        │     ▼               │
    CronJob ingesta-*   │  ┌───────┐          │
-   (3 schedules) ──────┼─▶│ PG 16 │◀─────────┘   PostgreSQL Flexible Server, private subnet
+   (3 schedules) ──────┼─▶│ PG 16 │◀─────────┘   RDS PostgreSQL, private subnets
         │              └─▶└───────┘
         ▼ HTTPS
    API-Sports · balldontlie.io · TheSportsDB
 ```
 
-One AKS cluster, three namespaces: `plataforma` (shared charts), `statline-staging` (follows `develop`), `statline-prod` (follows `main`).
+AWS Learner Lab, us-east-1 (D-38). One EKS cluster, three namespaces: `plataforma` (shared charts), `statline-staging` (follows `develop`), `statline-prod` (follows `main`). The lab allows no new IAM roles: the cluster, the nodes and every pod that calls AWS use the pre-created `LabRole`.
 
 ## 2. Terraform stacks
 
 | Stack | State | Contains |
 |---|---|---|
-| `terraform/bootstrap` | local (`terraform.tfstate`, gitignored) | `rg-statline-tfstate`, storage account `ststatlinetf<6>`, container `tfstate`, *Storage Blob Data Contributor* for the caller |
-| `terraform/principal` | `tfstate/principal.tfstate` in the bootstrap account, lease-locked | `rg-statline` and the modules below |
+| `terraform/bootstrap` | local (`terraform.tfstate`, gitignored) | `awscc_s3_bucket` `statline-tfstate-<account>` (versioning, SSE-S3, public access blocked, old versions 30 days) · `aws_eip` `statline-ingress` |
+| `terraform/principal` | `principal.tfstate` in the bootstrap bucket, S3-native lock (`use_lockfile`) | the modules below |
 
-`principal` uses `use_azuread_auth = true`: no storage keys anywhere. `make backend-config` writes `backend.hcl` from the bootstrap outputs.
+Both bootstrap resources outlive `make destroy` of principal: the state must, and the Elastic IP keeps the public address. The bucket is an `awscc` resource because the lab's SCP denies `s3:GetBucketObjectLockConfiguration`, which `aws_s3_bucket` reads (D-38). `make backend-config` writes `backend.hcl` from the bootstrap outputs; `make init` checks it belongs to the current lab account.
 
 ## 3. Modules and resources
 
-| Module | Status | Resources |
+| Module | Resources |
+|---|---|
+| `red` | `vpc-statline` 10.0.0.0/16 · one public subnet 10.0.0.0/20 in us-east-1a (nodes and the NLB; tags `kubernetes.io/role/elb`, `kubernetes.io/cluster/statline`) · two private subnets 10.0.64.0/24 and 10.0.65.0/24 (RDS, control-plane ENIs) · internet gateway · no NAT gateway (nodes have public IPs) |
+| `eks` | `statline` cluster, EKS 1.35, `upgrade_policy = STANDARD` (never extended support), public and private endpoint, access entries with the creator as admin, control-plane logs api, controllerManager, scheduler · managed node group 2 × t3.medium (fixed; max 3 by hand) in the public subnet, AL2023, `maxPods: 110`, IMDS hop limit 2 · addons vpc-cni (network policies, prefix delegation), kube-proxy, coredns, metrics-server · cluster and node role: `LabRole` |
+| `datos` | `statline-pg` RDS PostgreSQL 16, db.t3.micro, 20 GB gp3 encrypted, private, 1-day backups, no final snapshot, no deletion protection, logs to CloudWatch · security group: 5432 from the cluster security group only · master password from `random_password` |
+| `seguridad` | SSM SecureStrings (default `aws/ssm` key) below · `random_password` for the JWT secrets and the seed admin |
+| `observabilidad` | CloudWatch log groups `/aws/eks/statline/cluster` and `/aws/rds/instance/statline-pg/postgresql`, 3-day retention, created before the services that write them |
+| `plataforma` | `kubernetes_namespace` ×3 (label `statline.io/ambiente`) · `random_password` Grafana · `helm_release`: ingress-nginx 4.15.1 (NLB with `aws-load-balancer-eip-allocations`), cert-manager v1.21.3, argo-cd 10.11.6, kube-prometheus-stack 92.16.0, external-secrets 2.14.0, all in `plataforma` · Job `crear-bases-<hash>` that creates `statline_staging` and `statline_prod` (D-16). Redis is a StatefulSet in the GitOps chart (D-20) |
+
+Outputs other repos or the chart rely on: `region`, `cluster_name`, `ingress_ip`, `ssm_prefix`, `ssm_parameters`, `postgres_address`, `postgres_private_cidrs` (`networkPolicies.postgresCidr`), `log_groups`, `grafana_admin_password` (sensitive). Bootstrap: `account_id`, `state_bucket`, `region`, `ingress_eip_allocation_id`, `ingress_ip`. Renaming one is a contract change.
+
+### SSM parameters (contract)
+
+Names are fixed; the chart's ExternalSecret reads them by these names. `<env>` is `staging` or `prod`.
+
+| Parameter | Value | Source |
 |---|---|---|
-| `red` | done | `vnet-statline` 10.0.0.0/16 · `snet-aks` 10.0.0.0/20 · `snet-postgres` 10.0.16.0/24 delegated to `Microsoft.DBforPostgreSQL/flexibleServers` · `nsg-statline-aks` (80/443 from Internet) · private DNS zone `statline.private.postgres.database.azure.com` + VNet link |
-| `aks` | done | `id-statline-aks` (user-assigned) with *Network Contributor* on `snet-aks` · `aks-statline` 1.30, node pool `system` 2→4 × Standard_B2s, Azure CNI, Azure network policy, service CIDR 10.1.0.0/16, OIDC issuer, workload identity, Key Vault Secrets Store CSI add-on (rotation 5 min) |
-| `datos` | done | `psql-statline-<5>` PostgreSQL 16 `B_Standard_B1ms`, 32 GiB auto-grow, 7-day backups, private access only, `require_secure_transport=on` · databases `statline_staging` and `statline_prod` (D-16; destroyed with the server, dump first) · admin password from `random_password` |
-| `seguridad` | done | `kv-statline-<5>` Standard, RBAC (`rbac_authorization_enabled`), soft delete 7 days, purge protection off, public access with default Allow (D-18) · *Key Vault Secrets Officer* for the deployer · *Key Vault Secrets User* for the CSI add-on identity · secrets below |
-| `observabilidad` | done (SL-10) | `log-statline` Log Analytics, PerGB2018, 30 days retention, daily cap 0.5 GB (`log_analytics_daily_quota_gb`) · one `azurerm_monitor_diagnostic_setting` per entry of `recursos_diagnostico` (`diag-aks`, `diag-postgres`), destination *Dedicated* tables. AKS: `kube-apiserver`, `kube-controller-manager`, `kube-scheduler`, `cluster-autoscaler`, `guard` + AllMetrics. PostgreSQL: `allLogs` group + AllMetrics. Key Vault: `allLogs` group + AllMetrics |
-| `principal` (SL-12) | done | `azurerm_public_ip.ingress` (Standard, Static, `rg-statline`) · `azurerm_role_assignment` Network Contributor on `rg-statline` for the AKS identity · `kubernetes`/`helm` providers from `module.aks.kube_config` |
-| `dns` | done (SL-12, only if `dominio` is set) | `azurerm_dns_zone` `dominio` · A records `@` and `staging` → ingress IP (TTL 300) |
-| `plataforma` | done (SL-12) | `kubernetes_namespace` ×3 (`plataforma`, `statline-staging`, `statline-prod`, label `statline.io/ambiente`) · `random_password` Grafana · `helm_release`: ingress-nginx 4.15.1, cert-manager v1.21.3, argo-cd 10.11.6, kube-prometheus-stack 92.16.0 — all in `plataforma`. Redis is a StatefulSet in the GitOps chart (D-20) |
-
-Outputs other repos or the chart rely on: `aks_cluster_name`, `resource_group_name`, `aks_oidc_issuer_url`, `key_vault_csi_identity_client_id`, `postgres_fqdn`, `key_vault_name`, `key_vault_uri`, `tenant_id` (SecretProviderClass), `log_analytics_workspace_id`, `log_analytics_workspace_name`, `ingress_public_ip`, `dns_name_servers` (null without `dominio`), `grafana_admin_password` (sensitive). Renaming one is a contract change. Key Vault, PostgreSQL and AKS all send diagnostics to `log-statline`.
-
-### Key Vault secrets (contract)
-
-Names are fixed; the SecretProviderClass (SL-58) and the backend read them by these names. `<env>` is `staging` or `prod`.
-
-| Secret | Value | Per env | Source |
-|---|---|---|---|
-| `database-url-<env>` | `DATABASE_URL` for `statline_<env>` (admin login, `sslmode=require`) | yes | `module.datos.database_urls` |
-| `jwt-secret-<env>` | `JWT_SECRET`, 64 chars | yes | `random_password` |
-| `seed-admin-password-<env>` | `SEED_ADMIN_PASSWORD`: password of the first ADMIN (`admin@statline.local`), read only by the api `seed` initContainer | yes | `random_password` (32 chars) |
-| `jwt-refresh-secret-<env>` | `JWT_REFRESH_SECRET`, 64 chars | yes | `random_password` |
-| `api-sports-key` | `API_SPORTS_KEY` | no (one quota for all envs) | placeholder `set-me`, set out of band; Terraform ignores later changes |
-| `balldontlie-api-key` | `BALLDONTLIE_API_KEY` (ingesta NBA fallback) | no | placeholder `set-me`, set out of band before enabling `FALLBACK_HABILITADO`; Terraform ignores later changes |
+| `/statline/<env>/database-url` | `DATABASE_URL` for `statline_<env>` (master login, `sslmode=require`) | `module.datos.database_urls` |
+| `/statline/<env>/jwt-secret` | `JWT_SECRET`, 64 chars | `random_password` |
+| `/statline/<env>/jwt-refresh-secret` | `JWT_REFRESH_SECRET`, 64 chars | `random_password` |
+| `/statline/<env>/seed-admin-password` | `SEED_ADMIN_PASSWORD`: password of the first ADMIN (`admin@statline.local`), read only by the api `seed` initContainer | `random_password` (32 chars) |
+| `/statline/comun/api-sports-key` | `API_SPORTS_KEY` (one quota for all envs) | placeholder `set-me`, set out of band (RUNBOOK 2.2); Terraform ignores later changes |
+| `/statline/comun/balldontlie-api-key` | `BALLDONTLIE_API_KEY` (ingesta NBA fallback) | placeholder `set-me`, set before enabling `FALLBACK_HABILITADO`; Terraform ignores later changes |
 
 The Kubernetes Secret `statline-secrets` maps these to the env names the images expect (§5).
 
 ### Why private access for PostgreSQL
 
-With a delegated subnet the server has no public endpoint, so the proposal's "firewall rules" are replaced by the network boundary: only the VNet (AKS pods) can reach it. Admin access for humans goes through `kubectl run` with a `postgres:16` client pod or `kubectl port-forward` to a pod (D-06).
+RDS sits in the private subnets with `publicly_accessible = false`, and its security group admits 5432 only from the EKS cluster security group (nodes and pods). Admin access for humans goes through `kubectl run` with a `postgres:16` client pod (D-06).
 
 ## 4. Cluster layout (SL-53 chart, SL-58 values, SL-55 HPA, SL-56 NetworkPolicy and PDB)
 
@@ -80,7 +78,7 @@ With a delegated subnet the server has no public endpoint, so the proposal's "fi
 | `gitops/charts/statline/values-{staging,prod,k3d}.yaml` | one file per environment. Argo CD renders staging and prod; `make k3d-deploy` renders k3d |
 | `gitops/charts/redis/` | Redis StatefulSet, Service and ServiceAccount for `plataforma` (D-26) |
 | `gitops/argocd/` | `project.yaml` (AppProject `statline`), `root.yaml` (app of apps), `apps/` (statline-staging, statline-prod, redis, plataforma-config) |
-| `gitops/plataforma/` | cert-manager `ClusterIssuer`s `letsencrypt-staging` and `letsencrypt-prod` |
+| `gitops/plataforma/` | cert-manager `ClusterIssuer`s `letsencrypt-staging` and `letsencrypt-prod` · `ClusterSecretStore` `statline-ssm` (SSM Parameter Store, D-38) |
 
 Image tags live on `<component>.image.tag` (`web`, `api`, `predicciones`, `ingesta`). The image is `<global.imageRegistry>/<image.repository>:<tag>`, so `docker.io/statline/api:<tag>`. `cd.yml` is the only writer of those paths in `values-staging.yaml` and `values-prod.yaml`.
 
@@ -90,16 +88,7 @@ Naming and labels: objects are named `<release>-<component>` (release `statline-
 
 | Object | Count | Detail |
 |---|---|---|
-| Namespace | 3 | `plataforma`, `statline-staging`, `statline-prod` |
-| Deployment | 3 per env | `web` (2 replicas), `api`, `predicciones` |
-| StatefulSet | 1 | Redis 7 (our own manifest in the GitOps chart, in `plataforma`; not a Bitnami chart, D-26) |
-| CronJob | 3 per env | `ingesta-basquetbol` `0 8 * * *` · `ingesta-americano` `0 8 * * 2` · `ingesta-futbol` `0 8 * * 1,5` (UTC) |
-| Service | 4 | ClusterIP for web, api, predicciones and Redis |
-| Ingress | 1 per env | `/` → web, `/api` → api; TLS via cert-manager |
-| HPA | 2 per env | api 2–6 at 70 % CPU; predicciones 1–4 at 75 % CPU |
-| ConfigMap | 1 per component | non-secret settings (ports, `PREDICCIONES_URL`, `TEMPORADA_*`, log level) |
-| SecretProviderClass | 1 per env | mounts the Key Vault secrets and syncs a Kubernetes Secret `statline-secrets` |
-| Namespace | 3 | `plataforma`, `statline-staging`, `statline-prod` (created by `k3d-up` or ops; Argo uses `CreateNamespace=false`) |
+| Namespace | 3 | `plataforma`, `statline-staging`, `statline-prod` (created by `k3d-up` or Terraform; Argo uses `CreateNamespace=false`) |
 | Deployment | 3 per env | `web` (2 replicas), `api` (2, initContainers `migrate` then `seed`), `predicciones` (1) |
 | StatefulSet | 1 | Redis, in `plataforma` (`gitops/charts/redis`) |
 | CronJob | 3 per env | `ingesta-basquetbol` `0 8 * * *` · `ingesta-americano` `0 8 * * 2` · `ingesta-futbol` `0 8 * * 1,5` (UTC). `concurrencyPolicy: Forbid`, `backoffLimit: 1`, `activeDeadlineSeconds: 3600` |
@@ -107,12 +96,11 @@ Naming and labels: objects are named `<release>-<component>` (release `statline-
 | Ingress | 1 per env | `/api` → api, `/` → web; class `nginx`; TLS through cert-manager when `ingress.tls.enabled` |
 | ServiceAccount | 1 per workload | `automountServiceAccountToken: false` (a values switch per component) |
 | ConfigMap | 1 for api, predicciones, ingesta | non-secret settings. Web has no env, so it has no ConfigMap. Changes roll the pods through a `checksum/config` annotation |
-| SecretProviderClass or Secret | 1 per env | see 4.3 |
-| HPA | 2 per env (staging, prod) | `autoscaling/v2`. api 2–6 at 70 % CPU; predicciones 1–4 at 75 % CPU; scale-down stabilization 300 s. When enabled, the Deployment omits `spec.replicas`. Needs metrics-server (AKS and k3s have it). Disabled in k3d |
+| ExternalSecret or Secret | 1 per env | see 4.3 |
+| HPA | 2 per env (staging, prod) | `autoscaling/v2`. api 2–6 at 70 % CPU; predicciones 1–4 at 75 % CPU; scale-down stabilization 300 s. When enabled, the Deployment omits `spec.replicas`. Needs metrics-server (the EKS addon; k3s ships it). Disabled in k3d |
 | PodDisruptionBudget | 3 per env | web and api `minAvailable: 1`; predicciones `maxUnavailable: 1` (D-31). Disabled for web and api in k3d (single replica) |
 | NetworkPolicy | ~10 per env | default-deny ingress and egress, then one allow policy per flow (5.1). Enabled in staging, prod and k3d |
 | Job | 1 per env | `<release>-smoke`: post-deploy smoke test, PostSync and Helm hook (D-33). Pod label `statline.io/smoke: "true"` lets it reach web, api and predicciones (NetworkPolicies) |
-| HPA | 2 per env | api 2–6 at 70 % CPU; predicciones 1–4 at 75 % CPU. **Later task** |
 
 ### 4.3 Secret mapping
 
@@ -120,7 +108,7 @@ Naming and labels: objects are named `<release>-<component>` (release `statline-
 
 | Mode | Used by | Behavior |
 |---|---|---|
-| `csi` | staging, prod | SecretProviderClass `statline-kv` (provider azure, `useVMManagedIdentity: "true"`, `usePodIdentity: "false"`) reads each Key Vault object in `secrets.csi.objects` (env var → KV name) and syncs it into the Secret. Pods that read secrets mount the CSI volume read-only at `/mnt/secrets-store`, which is what triggers the sync. Rotation: update KV, then restart the Deployment (section 8). |
+| `external` | staging, prod | `ExternalSecret` `statline-secrets` (sync wave -1) reads each SSM parameter in `secrets.external.parameters` (env var → parameter name) through the ClusterSecretStore `statline-ssm` and writes the Secret; External Secrets refreshes it every hour. The store authenticates with the node's `LabRole` through IMDS (no IRSA in the lab). Rotation: change the parameter, wait for the refresh (or annotate the ExternalSecret `force-sync`), restart the Deployment (section 8). |
 | `plain` | k3d only | the chart renders the Secret from `secrets.plain.data`. Values are fake. With `devPostgres.enabled`, `DATABASE_URL` points to the dev Postgres. |
 
 Per workload, the env vars it reads from the Secret (`<component>.secretKeys`, set via `secretKeyRef`):
@@ -132,7 +120,7 @@ Per workload, the env vars it reads from the Secret (`<component>.secretKeys`, s
 | predicciones | `DATABASE_URL` |
 | ingesta CronJobs | `DATABASE_URL`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY` (optional) |
 
-Key Vault object names (`secrets.csi.objects`): staging uses `database-url-staging`, `jwt-secret-staging`, `jwt-refresh-secret-staging`, `seed-admin-password-staging` and `api-sports-key`; prod uses the same names with `-prod`; `api-sports-key` and `balldontlie-api-key` are shared. The `balldontlie-api-key` object must exist in Key Vault even though the env var is optional: a missing object fails the CSI mount. Terraform outputs used for the SPC values: `key_vault_name`, `tenant_id`, `key_vault_csi_identity_client_id`. All names are configurable in values.
+SSM parameter names (`secrets.external.parameters`): staging uses `/statline/staging/{database-url,jwt-secret,jwt-refresh-secret,seed-admin-password}`; prod the same with `prod`; `/statline/comun/api-sports-key` and `/statline/comun/balldontlie-api-key` are shared. The balldontlie parameter must exist even though the env var is optional: a missing parameter fails the sync. All names are configurable in values. Limit: one node role for every pod, so either namespace could read the other environment's parameters; the ClusterSecretStore admits only the two app namespaces.
 
 ### 4.4 Redis
 
@@ -239,8 +227,8 @@ Nothing else is allowed: web has no egress beyond DNS, ingesta has no ingress, a
 
 | Task | How |
 |---|---|
-| First deploy | `make bootstrap` → `make apply-aks` → `make plan` → `make apply` → `az aks get-credentials` (D-24) |
-| Daily stop | `make destroy` (data is lost unless dumped: `pg_dump` through a client pod first) |
+| First deploy | `make creds` → `make bootstrap` → `make apply-eks` → `make plan` → `make apply` → `make kubeconfig` (D-24, RUNBOOK §2) |
+| Daily stop | `make destroy` (data is lost unless dumped first, RUNBOOK §8). It removes the platform charts, waits for the ingress NLB to go, then destroys the rest |
 | DB shell | `kubectl run psql --rm -it --image=postgres:16-alpine -- psql "$DATABASE_URL"` |
-| Rotate a secret | update it in Key Vault; the CSI driver re-syncs within 5 min; restart the Deployment |
+| Rotate a secret | `aws ssm put-parameter --overwrite`; External Secrets re-syncs within 1 h (or annotate the ExternalSecret `force-sync=$(date +%s)`); restart the Deployment |
 | Local cluster | `make k3d-up`, then `make k3d-deploy` (Redis and the chart with `values-k3d.yaml`); the README in `gitops/` has the full steps |

@@ -1,78 +1,72 @@
 # Runbook
 
-How to bring the StatLine environment up on Azure, run it, check it, roll it back and take it down. Each step names its command. Decisions behind the steps are in `docs/DECISIONS.md`.
+How to bring the StatLine environment up on the AWS Learner Lab, run it, check it, roll it back and take it down. Each step names its command. Decisions behind the steps are in `docs/DECISIONS.md` (the move to AWS is D-38).
 
-Placeholders: `<env>` is `staging` or `prod`; `<dominio>` the environment host (`staging.<dominio>` for staging); `<kv>` the Key Vault name; `<ID>` a row from `argocd app history`; `<bump-sha>` the squash commit of a bump PR.
+Placeholders: `<env>` is `staging` or `prod`; `<ip>` the bootstrap Elastic IP (52.71.150.91 in the current lab account), so the hosts are `staging.<ip>.nip.io` and `<ip>.nip.io`; `<ID>` a row from `argocd app history`; `<bump-sha>` the squash commit of a bump PR.
 
-**Order for a fresh environment:** 1 (once) → 2 → 3 → 4 and 5 → 9 (evidence) → 8 at the end of the session.
+**Order for a fresh environment:** 1 (once) → 2 → 3 → 4 and 5 → 9 (evidence) → 8 at the end of the session. **Every session starts with `make creds`**: the lab keys expire with the session.
 
-**Rules:** `make apply`, `make destroy` and every `kubectl`/`az` command that changes something need the person running them to confirm the target first. `kubectl config current-context` must be `aks-statline` (or `k3d-*` locally) before any `kubectl` command here.
+**Rules:** `make apply`, `make destroy` and every `kubectl`/`aws` command that changes something need the person running them to confirm the target first. `kubectl config current-context` must be `eks-statline` (or `k3d-*` locally) before any `kubectl` command here. Never use the `[default]` AWS profile: the Makefile and `make creds` use `statline-lab`.
 
 ## 1. Before the first deploy (once)
 
 Tools come from `mise install` (README). Then:
 
-1. **Azure account and limits.**
+1. **Lab session and keys.** Start the Learner Lab, then `make creds` and paste the block from **AWS Details → AWS CLI → Show** (or copy it and run `make creds FROM=clipboard`). It writes the `statline-lab` profile, checks it, and stores the keys as the `AWS_*` secrets of statline-infra for the CI plan (`SKIP_GH=1` for local only).
+2. **Limits, read-only.**
    ```bash
-   az login
-   az account set --subscription "<Azure for Students>"
-   az aks get-versions -l eastus2 -o table                  # is 1.30 offered? else the oldest supported minor
-   az vm list-usage -l eastus2 -o table | grep -iE "Total Regional vCPUs|Standard BS Family"   # 4 × B2s = 8 vCPUs
+   aws eks describe-cluster-versions --query 'clusterVersions[?versionStatus==`STANDARD_SUPPORT`].clusterVersion'   # 1.35 must be listed
+   aws iam get-role --role-name LabRole --query Role.Arn
    ```
-   If 1.30 is gone, set `kubernetes_version` in `principal.auto.tfvars` and record it in DECISIONS (Known limitations).
-2. **Docker Hub.** Create the repositories `statline/web`, `statline/api`, `statline/predicciones`, `statline/ingesta` and an access token with read and write.
-3. **GitHub secrets.** Set them yourself, so the values never land in a file or a chat:
+   If 1.35 left standard support, set `kubernetes_version` in `principal.auto.tfvars` to a listed one and record it in DECISIONS.
+3. **Docker Hub.** Create the repositories `statline/web`, `statline/api`, `statline/predicciones`, `statline/ingesta` and an access token with read and write.
+4. **GitHub secrets.** Set them yourself, so the values never land in a file or a chat:
    ```bash
    gh secret set DOCKERHUB_USERNAME   -R statline-iteso/statline-backend    # and -R statline-iteso/statline-frontend
    gh secret set DOCKERHUB_TOKEN      -R statline-iteso/statline-backend    # and frontend
    gh secret set INFRA_DISPATCH_TOKEN -R statline-iteso/statline-backend    # and frontend; fine-grained PAT, contents: write on statline-infra
    gh secret set GITOPS_PR_TOKEN      -R statline-iteso/statline-infra      # fine-grained PAT, contents + pull-requests: write on statline-infra (D-36)
    ```
-   `gh secret set` prompts for the value. The same PAT can serve both tokens if it has both permissions.
-4. **Optional, CI `terraform plan` on PRs.** Without these the `plan` job is skipped and nothing else breaks. It needs an Entra app registration with a federated credential for `repo:statline-iteso/statline-infra:pull_request`, then `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, and `TFSTATE_RESOURCE_GROUP` + `TFSTATE_STORAGE_ACCOUNT` from step 2.1. The app needs to read the subscription, the state container, the Key Vault secrets and the cluster; expect to adjust its roles on the first run.
+   `gh secret set` prompts for the value. The same PAT can serve both tokens if it has both permissions. The `AWS_*` secrets come from `make creds`, not from here.
 
 ## 2. Bring the environment up
 
 ### 2.1 Terraform
 
 ```bash
-make bootstrap                    # once per subscription: state storage account, writes terraform/principal/backend.hcl
-terraform -chdir=terraform/bootstrap output           # resource_group_name, storage_account_name → TFSTATE_* secrets
-cp terraform/principal/terraform.tfvars.example terraform/principal/principal.auto.tfvars
-# edit: subscription_id; dominio only if a domain is decided (else nip.io, below)
-make apply-aks                    # step 1: the AKS cluster alone (the kubernetes/helm providers need it)
+make bootstrap                    # once per lab account: S3 state bucket + Elastic IP, writes terraform/principal/backend.hcl
+terraform -chdir=terraform/bootstrap output -raw ingress_ip   # <ip>
+make apply-eks                    # step 1: the EKS cluster and nodes alone (~15 min; the kubernetes/helm providers need it)
 make plan                         # step 2: everything else; read the summary
-make apply                        # asks before applying (~15 min)
-az aks get-credentials -g rg-statline -n aks-statline
-kubectl config current-context    # must print aks-statline
+make apply                        # asks before applying (~10 min: RDS, charts, database Job)
+make kubeconfig                   # writes the eks-statline context
+kubectl config current-context    # must print eks-statline
+kubectl get nodes -o custom-columns=NAME:.metadata.name,STATUS:.status.conditions[-1].type,PODS:.status.allocatable.pods   # Ready, 110
+kubectl -n plataforma get svc ingress-nginx-controller        # EXTERNAL-IP: the NLB name; it resolves to <ip>
 ```
 
-Outputs used below: `terraform -chdir=terraform/principal output` (`key_vault_name`, `tenant_id`, `key_vault_csi_identity_client_id`, `ingress_public_ip`, `dns_name_servers`).
+No tfvars are needed. Outputs used below: `terraform -chdir=terraform/principal output` (`ingress_ip`, `ssm_prefix`, `ssm_parameters`, `postgres_address`).
+
+If a step fails with `AccessDenied … service control policy`, the lab forbids that API: note the action and the resource, and see D-38 for the workarounds used so far.
 
 ### 2.2 Secrets Terraform cannot know
 
-Terraform creates every Key Vault secret; the API keys are placeholders (`ignore_changes`). Set the real values without leaving them in the shell history:
+Terraform creates every SSM parameter; the API keys are placeholders (`ignore_changes`). Set the real values without leaving them in the shell history:
 
 ```bash
-KV=$(terraform -chdir=terraform/principal output -raw key_vault_name)
-read -rs KEY && az keyvault secret set --vault-name "$KV" -n api-sports-key --value "$KEY" -o none; unset KEY
-read -rs KEY && az keyvault secret set --vault-name "$KV" -n balldontlie-api-key --value "$KEY" -o none; unset KEY   # optional
+read -rs KEY && aws ssm put-parameter --overwrite --type SecureString --name /statline/comun/api-sports-key --value "$KEY" >/dev/null; unset KEY
+read -rs KEY && aws ssm put-parameter --overwrite --type SecureString --name /statline/comun/balldontlie-api-key --value "$KEY" >/dev/null; unset KEY   # optional
 ```
 
-The admin password for the app (`admin@statline.local`) is generated per environment (D-37):
+`--value` is visible in `ps` for the second the command runs; on a shared machine use `--cli-input-json file://…` from a file you delete afterwards. External Secrets picks the change up within the hour (section 6 has `force-sync`). The admin password for the app (`admin@statline.local`) is generated per environment (D-37):
 
 ```bash
-az keyvault secret show --vault-name "$KV" -n seed-admin-password-staging --query value -o tsv
+aws ssm get-parameter --with-decryption --name /statline/staging/seed-admin-password --query Parameter.Value --output text
 ```
 
-### 2.3 Fill the GitOps placeholders (one PR into `develop`)
+### 2.3 GitOps values
 
-| File | Set |
-|---|---|
-| `gitops/charts/statline/values-staging.yaml`, `values-prod.yaml` | `ingress.host`: `staging.<dominio>` / `<dominio>`, or without a domain `staging.<ip>.nip.io` / `<ip>.nip.io` (`ingress_public_ip`); `secrets.csi.keyvaultName`, `tenantId`, `userAssignedIdentityID` (`key_vault_csi_identity_client_id`) |
-| `gitops/plataforma/cluster-issuers.yaml` | the contact email (now `change-me@example.com`) |
-
-With a domain, delegate it at the registrar to `dns_name_servers` first; Let's Encrypt needs the name to resolve. `values-prod.yaml` reaches `main` with the release (SL-61).
+`values-staging.yaml` and `values-prod.yaml` already carry the nip.io hosts on the bootstrap Elastic IP and the SSM parameter names. They only change if the lab account changes (new account, new Elastic IP): then one PR into `develop` with the new `<ip>` in `ingress.host`. The ClusterIssuers have no contact email on purpose (optional in ACME). `values-prod.yaml` reaches `main` with the release (SL-61).
 
 ### 2.4 First images
 
@@ -87,7 +81,7 @@ Each run builds, scans and pushes, then asks statline-infra for a bump. `cd.yml`
 
 ### 2.5 Argo CD
 
-Terraform installs Argo CD in `plataforma`. Bootstrap the project and the app of apps once:
+Terraform installs Argo CD and External Secrets in `plataforma`. Bootstrap the project and the app of apps once:
 
 ```bash
 kubectl apply -f gitops/argocd/project.yaml -f gitops/argocd/root.yaml
@@ -96,6 +90,8 @@ kubectl -n plataforma get secret argocd-initial-admin-secret -o jsonpath='{.data
 kubectl -n plataforma port-forward svc/argo-cd-argocd-server 8080:80     # UI at http://localhost:8080, user admin
 argocd login localhost:8080 --username admin --insecure --grpc-web        # for the argocd commands in sections 4 and 6
 ```
+
+`plataforma-config` applies the ClusterIssuers and the ClusterSecretStore `statline-ssm`. Check the secrets sync before anything else: `kubectl -n statline-staging get externalsecret` must show `SecretSynced`. If it shows an AccessDenied error, the node role cannot read SSM: see D-38.
 
 Expected until the release: `statline-prod` shows `ComparisonError … app path does not exist`, because `main` does not have the chart yet (SL-61). Staging syncs from `develop`. The api pods run `migrate` and then `seed` before serving (leagues and first ADMIN, D-37), and the sync ends with the smoke hook (section 4).
 
@@ -106,8 +102,8 @@ Grafana: `kubectl -n plataforma port-forward svc/kube-prometheus-stack-grafana 3
 Log in as the seeded admin and keep the token in a variable:
 
 ```bash
-H=https://staging.<dominio>
-read -rs PASS                     # seed-admin-password-staging (2.2)
+H=https://staging.<ip>.nip.io
+read -rs PASS                     # /statline/staging/seed-admin-password (2.2)
 TOKEN=$(curl -s "$H/api/auth/login" -H 'content-type: application/json' \
   -d "{\"email\":\"admin@statline.local\",\"password\":\"$PASS\"}" | jq -r .accessToken); unset PASS
 ```
@@ -182,18 +178,18 @@ make smoke ENV=prod                    # statline-prod, release statline-prod
 make smoke ENV=staging RELEASE=statline   # k3d-deploy installs the release as "statline"
 ```
 
-`make smoke` creates a throwaway pod with the curl image and the same script (`gitops/charts/statline/files/smoke-test.sh`). It refuses to run unless the current kubectl context starts with `k3d-` or `aks-statline`. Do not point it at any other cluster.
+`make smoke` creates a throwaway pod with the curl image and the same script (`gitops/charts/statline/files/smoke-test.sh`). It refuses to run unless the current kubectl context starts with `k3d-` or `eks-statline`. Do not point it at any other cluster.
 
 ## 5. Public smoke checks (after a deploy, from outside)
 
 ```bash
-scripts/smoke.sh https://<dominio>
+scripts/smoke.sh https://<ip>.nip.io          # staging: https://staging.<ip>.nip.io
 ```
 
 It checks two things through the public Ingress:
 
-- `https://<dominio>/healthz` returns 200. This is the web (nginx) health endpoint.
-- `https://<dominio>/api/ligas` returns 401 without credentials. The Ingress routes `/api` to the api, and its reads require auth. A 401 proves that routing works. A 404 or 200 means the routing or the auth changed, so check with the backend owner.
+- `https://<host>/healthz` returns 200. This is the web (nginx) health endpoint.
+- `https://<host>/api/ligas` returns 401 without credentials. The Ingress routes `/api` to the api, and its reads require auth. A 401 proves that routing works. A 404 or 200 means the routing or the auth changed, so check with the backend owner.
 
 CI can call it too. It uses `SMOKE_ATTEMPTS` (default 10) and `SMOKE_INTERVAL` (default 6 s).
 
@@ -229,7 +225,7 @@ Then Argo CD picks up the new revision. It polls about every 3 minutes. To not w
 ```bash
 argocd app sync statline-staging      # or statline-prod
 argocd app wait statline-prod --health --timeout 300
-make smoke ENV=prod                   # or scripts/smoke.sh https://<dominio>
+make smoke ENV=prod                   # or scripts/smoke.sh https://<ip>.nip.io
 ```
 
 Do not revert the database. Migrations are forward only (D-12).
@@ -270,9 +266,9 @@ Staging and prod use `syncPolicy.retry.limit: 2` with backoff from 10 s (factor 
 
 ## 8. Tear down (end of every session)
 
-`make destroy` removes the whole `principal` stack, the database included (D-16). The state storage account from `make bootstrap` stays, so the next `make apply` works without a new bootstrap.
+`make destroy` removes the whole `principal` stack, the database included (D-16). The S3 state bucket and the Elastic IP from `make bootstrap` stay (the IP keeps the nip.io hosts valid, about USD 3.60/month), so the next session needs only `make creds`, `make apply-eks` and `make apply`. The destroy removes the platform charts first and waits for the ingress NLB to disappear (`scripts/esperar-nlb.sh`); otherwise its network interfaces would block deleting the VPC.
 
-1. **Keep the data, if it matters.** PostgreSQL is private and the namespaces are default-deny, so dump from a Job built from the NBA CronJob: it keeps the labels the PostgreSQL egress rule allows, the Key Vault volume and `DATABASE_URL`; only the image and the command change.
+1. **Keep the data, if it matters.** PostgreSQL is private and the namespaces are default-deny, so dump from a Job built from the NBA CronJob: it keeps the labels the PostgreSQL egress rule allows and `DATABASE_URL` from `statline-secrets`; only the image and the command change.
    ```bash
    ENV=staging   # or prod
    kubectl -n statline-$ENV create job pgdump --from=cronjob/statline-$ENV-ingesta-basquetbol --dry-run=client -o json \
@@ -285,20 +281,27 @@ Staging and prod use `syncPolicy.retry.limit: 2` with backoff from 10 s (factor 
    Restore after the next `make apply` (and after the api pods have migrated) the same way, with the file mounted from a ConfigMap or piped through `kubectl exec -i` into `psql "$DATABASE_URL"`. Dumps hold user emails and password hashes: keep them out of the repo.
 2. **Destroy.**
    ```bash
-   make destroy                      # shows the destroy plan, asks before running (~10 min)
-   kubectl config delete-context aks-statline
+   make destroy                      # shows the destroy plan, asks before running (~15 min)
+   kubectl config delete-context eks-statline
    ```
-3. Check the portal (or `az resource list -g rg-statline -o table`) shows nothing left but the state resource group.
+3. Check nothing billable is left but the bootstrap pair:
+   ```bash
+   aws eks list-clusters --query clusters                       # []
+   aws rds describe-db-instances --query 'DBInstances[].DBInstanceIdentifier'   # []
+   aws elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerName' # []
+   aws ec2 describe-instances --filters Name=instance-state-name,Values=running --query 'Reservations[].Instances[].InstanceId'   # []
+   ```
+   If the lab session ends mid-destroy, run `make creds` and `make destroy` again: Terraform resumes from the state in S3.
 
 ## 9. Evidence for SL-60
 
 Capture each item after a deploy, with the date visible, and put it in `docs/evidencia/` (PNG or text):
 
 - [ ] `make apply` summary (`Apply complete! Resources: …`).
-- [ ] `kubectl get nodes -o wide` and `kubectl get pods -A` (all Running or Completed).
+- [ ] `kubectl get nodes -o wide` and `kubectl get pods -A` (all Running or Completed), and `kubectl get externalsecret -A` (SecretSynced).
 - [ ] Argo CD UI: the five Applications, `statline-staging` Synced and Healthy, its resource tree.
-- [ ] A smoke hook that passed (`argocd app get statline-staging` shows the hook) and `scripts/smoke.sh https://staging.<dominio>`.
+- [ ] A smoke hook that passed (`argocd app get statline-staging` shows the hook) and `scripts/smoke.sh https://staging.<ip>.nip.io`.
 - [ ] Grafana: the api dashboard with traffic, and the ingesta dashboard after one run.
 - [ ] One ingestion per sport (`GET /api/ingestas`) and the forecasts screen with data.
 - [ ] A rollback drill on staging (section 6.2) with the before and after tags.
-- [ ] `make destroy` summary at the end.
+- [ ] `make destroy` summary at the end, and the lab's cost readout for the session.

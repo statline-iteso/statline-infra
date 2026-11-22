@@ -9,7 +9,7 @@ Entregable 2. La fuente de verdad es [`services/api/prisma/schema.prisma`](https
 | Métricas heterogéneas | Una columna `metricas` JSONB por línea de caja, validada contra el JSON Schema del deporte | Una tabla de estadísticas por deporte; cada consulta transversal se vuelve un `UNION` | Natural, pero pierde integridad referencial con partidos y jugadores |
 | Integridad | Llaves foráneas y únicas en columnas comunes (partido, jugador, equipo, minutos) | Igual | A mano en la aplicación |
 | Consultas | `metricas @> '{"puntos": 30}'` usa el índice GIN `jsonb_path_ops`; agregaciones con `(metricas->>'puntos')::int` | SQL simple pero triplicado | Agregaciones fuera del motor relacional |
-| Operación | Un solo motor gestionado en Azure | Igual | Otro servicio que pagar y operar |
+| Operación | Un solo motor gestionado (RDS en AWS) | Igual | Otro servicio que pagar y operar |
 
 **Desventaja aceptada:** el motor no valida la forma del JSONB; esa validación vive en la ingesta (JSON Schema estricto antes de cada insert, issue SL-15).
 
