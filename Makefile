@@ -53,8 +53,10 @@ apply: plan ## ⚠ Apply the saved plan (creates billable resources)
 	@[[ "$${CONFIRM:-}" == "yes" ]] || { read -rp "Apply this plan? [y/N] " a; [[ "$$a" == y ]]; }
 	$(TF) -chdir=$(PRINCIPAL) apply -input=false principal.tfplan
 
-apply-eks: init ## ⚠ First apply only: create module eks alone (providers need the cluster, see README)
-	$(TF) -chdir=$(PRINCIPAL) plan -input=false -target=module.eks -out=eks.tfplan
+# module.red is targeted as a whole: -target=module.eks alone pulls in only what eks references (VPC,
+# subnets), not the internet gateway and route tables, and nodes without a route out never join.
+apply-eks: init ## ⚠ First apply only: create the network and module eks (providers need the cluster, see README)
+	$(TF) -chdir=$(PRINCIPAL) plan -input=false -target=module.red -target=module.eks -out=eks.tfplan
 	@[[ "$${CONFIRM:-}" == "yes" ]] || { read -rp "Apply the EKS cluster plan (bills ~USD 0.30/h with the rest until make destroy)? [y/N] " a; [[ "$$a" == y ]]; }
 	$(TF) -chdir=$(PRINCIPAL) apply -input=false eks.tfplan
 	@rm -f $(PRINCIPAL)/eks.tfplan
