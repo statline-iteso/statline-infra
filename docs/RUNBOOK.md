@@ -19,7 +19,7 @@ Tools come from `mise install` (README). Then:
    aws iam get-role --role-name LabRole --query Role.Arn
    ```
    If 1.35 left standard support, set `kubernetes_version` in `principal.auto.tfvars` to a listed one and record it in DECISIONS.
-3. **Docker Hub.** Create the repositories `statline/web`, `statline/api`, `statline/predicciones`, `statline/ingesta` and an access token with read and write.
+3. **Docker Hub.** Images go to the `pardosito` account (`pardosito/{web,api,predicciones,ingesta}`; the first push creates each repository). Create a personal access token with Read & Write, and set `gh variable set DOCKERHUB_NAMESPACE --body pardosito` in backend and frontend.
 4. **GitHub secrets.** Set them yourself, so the values never land in a file or a chat:
    ```bash
    gh secret set DOCKERHUB_USERNAME   -R statline-iteso/statline-backend    # and -R statline-iteso/statline-frontend
