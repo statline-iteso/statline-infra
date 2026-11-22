@@ -57,7 +57,7 @@ Out of scope: fantasy-platform sync (ESPN, Yahoo), betting odds, multi-region, s
 | Cache | **Redis 7.4** (own StatefulSet chart, `gitops/charts/redis`, D-26) |
 | GitOps | **Argo CD**; Helm chart with `values-staging.yaml` / `values-prod.yaml` |
 | Observability | **kube-prometheus-stack** (Prometheus, Grafana), CloudWatch logs for the EKS control plane and RDS |
-| Images | **Docker Hub**: `statline/web`, `statline/api`, `statline/predicciones`, `statline/ingesta` (short SHA + SemVer) |
+| Images | **Docker Hub**, namespace `pardosito` (repo variable `DOCKERHUB_NAMESPACE` in the app repos): `pardosito/{web,api,predicciones,ingesta}` (short SHA + SemVer) |
 | Local | **k3d** (k3s 1.35) with ingress-nginx |
 | CI | **GitHub Actions**; checks: `terraform fmt/validate`, `tflint` (aws ruleset), shellcheck, `helm lint` + kubeconform; an informational `terraform plan` comment on PRs with the lab keys |
 

@@ -80,7 +80,7 @@ RDS sits in the private subnets with `publicly_accessible = false`, and its secu
 | `gitops/argocd/` | `project.yaml` (AppProject `statline`), `root.yaml` (app of apps), `apps/` (statline-staging, statline-prod, redis, plataforma-config) |
 | `gitops/plataforma/` | cert-manager `ClusterIssuer`s `letsencrypt-staging` and `letsencrypt-prod` · `ClusterSecretStore` `statline-ssm` (SSM Parameter Store, D-38) |
 
-Image tags live on `<component>.image.tag` (`web`, `api`, `predicciones`, `ingesta`). The image is `<global.imageRegistry>/<image.repository>:<tag>`, so `docker.io/statline/api:<tag>`. `cd.yml` is the only writer of those paths in `values-staging.yaml` and `values-prod.yaml`.
+Image tags live on `<component>.image.tag` (`web`, `api`, `predicciones`, `ingesta`). The image is `<global.imageRegistry>/<image.repository>:<tag>`, so `docker.io/pardosito/api:<tag>`. The namespace is the app repos' `DOCKERHUB_NAMESPACE` variable; change both together. `cd.yml` is the only writer of those paths in `values-staging.yaml` and `values-prod.yaml`.
 
 Naming and labels: objects are named `<release>-<component>` (release `statline-staging` gives `statline-staging-api`), and the CronJobs `<release>-ingesta-<job>`. `app.kubernetes.io/name` is `statline-<component>` so selectors use that label alone (AGENTS.md section 7). Every object also carries `app.kubernetes.io/{instance,part-of,component,version,managed-by}` and `statline.io/environment`.
 

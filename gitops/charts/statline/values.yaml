@@ -69,7 +69,7 @@ web:
   port: 8080
   runAsUser: 101
   image:
-    repository: statline/web
+    repository: pardosito/web
     tag: ""
     pullPolicy: IfNotPresent
   serviceAccount:
@@ -100,7 +100,7 @@ api:
   port: 3000
   runAsUser: 1000
   image:
-    repository: statline/api
+    repository: pardosito/api
     tag: ""
     pullPolicy: IfNotPresent
   config:
@@ -166,7 +166,7 @@ predicciones:
   port: 8000
   runAsUser: 10001
   image:
-    repository: statline/predicciones
+    repository: pardosito/predicciones
     tag: ""
     pullPolicy: IfNotPresent
   config:
@@ -187,7 +187,7 @@ predicciones:
 ingesta:
   runAsUser: 10001
   image:
-    repository: statline/ingesta
+    repository: pardosito/ingesta
     tag: ""
     pullPolicy: IfNotPresent
   config:
