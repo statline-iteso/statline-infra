@@ -82,26 +82,6 @@ Input: dict with keys (list of env var names), secretName and optional (list of 
 {{- end }}
 {{- end -}}
 
-{{/* Volume for the Secrets Store CSI driver (csi mode only). Read-only at /mnt/secrets-store. */}}
-{{- define "statline.secretVolume" -}}
-{{- if eq .Values.secrets.mode "csi" }}
-- name: secrets-store
-  csi:
-    driver: secrets-store.csi.k8s.io
-    readOnly: true
-    volumeAttributes:
-      secretProviderClass: {{ .Values.secrets.csi.secretProviderClassName | quote }}
-{{- end }}
-{{- end -}}
-
-{{- define "statline.secretVolumeMount" -}}
-{{- if eq .Values.secrets.mode "csi" }}
-- name: secrets-store
-  mountPath: /mnt/secrets-store
-  readOnly: true
-{{- end }}
-{{- end -}}
-
 {{/* Writable scratch space for read-only root filesystems. */}}
 {{- define "statline.tmpVolume" -}}
 - name: tmp

@@ -2,7 +2,7 @@
 {{- $c := "postgres" }}
 {{- $name := include "statline.fullname" (dict "component" $c "ctx" .) }}
 {{- $labels := include "statline.labels" (dict "component" $c "ctx" . "version" "") }}
-# DEV ONLY (k3d). Ephemeral PostgreSQL in the namespace; production uses Azure Database for PostgreSQL.
+# DEV ONLY (k3d). Ephemeral PostgreSQL in the namespace; staging and prod use RDS PostgreSQL.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

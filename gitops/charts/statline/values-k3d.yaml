@@ -18,7 +18,7 @@ networkPolicies:
   ingressController:
     namespaceLabels:
       kubernetes.io/metadata.name: ingress-nginx
-  # Dev Postgres runs in the release namespace (devPostgres below); there is no Azure subnet.
+  # Dev Postgres runs in the release namespace (devPostgres below); there is no RDS subnet.
   postgresCidr: ""
 
 # No Prometheus Operator CRDs in k3d.

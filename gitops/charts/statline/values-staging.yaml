@@ -5,8 +5,8 @@ networkPolicies:
   enabled: true
 
 ingress:
-  # Placeholder: replace with the real domain before deploying.
-  host: "staging.<dominio>"
+  # nip.io on the bootstrap Elastic IP (terraform -chdir=terraform/bootstrap output -raw ingress_ip, D-38).
+  host: "staging.52.71.150.91.nip.io"
   tls:
     enabled: true
     secretName: statline-tls
@@ -16,17 +16,14 @@ redis:
   dbIndex: 1
 
 secrets:
-  csi:
-    keyvaultName: kv-statline-REPLACE
-    tenantId: REPLACE-TENANT-ID
-    userAssignedIdentityID: REPLACE-IDENTITY-CLIENT-ID
-    objects:
-      DATABASE_URL: database-url-staging
-      JWT_SECRET: jwt-secret-staging
-      JWT_REFRESH_SECRET: jwt-refresh-secret-staging
-      API_SPORTS_KEY: api-sports-key
-      BALLDONTLIE_API_KEY: balldontlie-api-key
-      SEED_ADMIN_PASSWORD: seed-admin-password-staging
+  external:
+    parameters:
+      DATABASE_URL: /statline/staging/database-url
+      JWT_SECRET: /statline/staging/jwt-secret
+      JWT_REFRESH_SECRET: /statline/staging/jwt-refresh-secret
+      API_SPORTS_KEY: /statline/comun/api-sports-key
+      BALLDONTLIE_API_KEY: /statline/comun/balldontlie-api-key
+      SEED_ADMIN_PASSWORD: /statline/staging/seed-admin-password
 
 # Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
 web:

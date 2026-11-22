@@ -24,27 +24,25 @@ redis:
 
 # Secrets. Both modes produce ONE Kubernetes Secret named secrets.name whose keys are the env var names.
 secrets:
-  # csi:   SecretProviderClass syncs Key Vault secrets into the Secret (production and staging).
-  # plain: the chart renders the Secret from secrets.plain.data (k3d only; fake values).
-  mode: csi
+  # external: External Secrets syncs SSM Parameter Store into the Secret (staging and prod, D-38).
+  # plain:    the chart renders the Secret from secrets.plain.data (k3d only; fake values).
+  mode: external
   name: statline-secrets
-  csi:
-    secretProviderClassName: statline-kv
-    # Key Vault name (kv-statline-<suffix>), tenant and the CSI add-on identity client id.
-    # Outputs of terraform/principal (key_vault_csi_identity_client_id).
-    keyvaultName: ""
-    tenantId: ""
-    userAssignedIdentityID: ""
-    # Env var (= Secret key) -> Key Vault secret name. Environment files set the real names.
-    objects:
-      DATABASE_URL: database-url
-      JWT_SECRET: jwt-secret
-      JWT_REFRESH_SECRET: jwt-refresh-secret
-      API_SPORTS_KEY: api-sports-key
-      # Optional fallback provider. The Key Vault object must exist (Terraform seguridad module), or the CSI mount fails.
-      BALLDONTLIE_API_KEY: balldontlie-api-key
+  external:
+    # ClusterSecretStore in gitops/plataforma/cluster-secret-store.yaml.
+    storeName: statline-ssm
+    refreshInterval: 1h
+    # Env var (= Secret key) -> SSM parameter (module seguridad: /statline/<env>/<name> and
+    # /statline/comun/<name>). Environment files set the real names; empty fails the render.
+    parameters:
+      DATABASE_URL: ""
+      JWT_SECRET: ""
+      JWT_REFRESH_SECRET: ""
+      API_SPORTS_KEY: ""
+      # Optional fallback provider. The parameter must exist (Terraform creates a placeholder), or the sync fails.
+      BALLDONTLIE_API_KEY: ""
       # Password of the first ADMIN; only the api seed initContainer reads it (backend D-37).
-      SEED_ADMIN_PASSWORD: seed-admin-password
+      SEED_ADMIN_PASSWORD: ""
   plain:
     # Only read when secrets.mode is plain. Never put real values here.
     data: {}
@@ -88,7 +86,7 @@ web:
 api:
   # Used only when autoscaling.enabled is false (the HPA owns the count otherwise).
   replicas: 2
-  # HorizontalPodAutoscaler (autoscaling/v2, D-31). Needs metrics-server; AKS and k3s ship it.
+  # HorizontalPodAutoscaler (autoscaling/v2, D-31). Needs metrics-server (k3s ships it; on EKS it is the metrics-server addon, module eks).
   autoscaling:
     enabled: false
     minReplicas: 2
@@ -266,17 +264,18 @@ networkPolicies:
       kubernetes.io/metadata.name: plataforma
     podLabels:
       app.kubernetes.io/name: redis
-  # CIDR of the PostgreSQL delegated subnet snet-postgres (D-06). Empty when no external PostgreSQL.
-  postgresCidr: "10.0.16.0/24"
-  # Kubernetes API address, as /32. Required when api.ingestaLanzador is kubernetes. No default:
-  # the AKS API server is public, so the address comes from the cluster (kubectl get endpoints kubernetes).
+  # The two private subnets of module red that hold RDS (10.0.64.0/24, 10.0.65.0/24; output
+  # postgres_private_cidrs). Empty when no external PostgreSQL.
+  postgresCidr: "10.0.64.0/23"
+  # Kubernetes API address(es). Required when api.ingestaLanzador is kubernetes. No default: on EKS
+  # in-VPC calls reach the control-plane ENIs, whose IPs come from the cluster (kubectl get endpoints kubernetes).
   kubeApiCidr: ""
   kubeApiPorts:
     - 443
     - 6443
-  # Optional ingress allow from the node subnet (AKS snet-aks: 10.0.0.0/20), for kubelet probes. Empty
-  # (off) by default: Azure NPM and kube-router already allow node-to-local-pod traffic. Set it only
-  # if probes fail after enabling policies.
+  # Optional ingress allow from a node CIDR, for kubelet probes. Empty (off) by default: kube-router
+  # and the EKS VPC CNI policy agent allow node-to-local-pod traffic. Not usable on EKS anyway: pods
+  # take IPs from the node subnet, so the CIDR would open every pod to every other pod.
   allowNodeCidr: ""
 
 # Post-deploy smoke tests (templates/smoke-test.yaml). A Job that runs after every sync: an Argo CD
