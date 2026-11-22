@@ -28,23 +28,23 @@ secrets:
 # Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
 web:
   image:
-    tag: "0000000"
+    tag: "1d11fbc"
 api:
   autoscaling:
     enabled: true
   image:
-    tag: "0000000"
+    tag: "280774b"
 predicciones:
   autoscaling:
     enabled: true
   image:
-    tag: "0000000"
+    tag: "280774b"
 ingesta:
   config:
     # Fallback data can duplicate games; keep off until deduplication is verified.
     fallbackHabilitado: "false"
   image:
-    tag: "0000000"
+    tag: "280774b"
 
 monitoring:
   enabled: true
