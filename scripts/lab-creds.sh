@@ -13,6 +13,7 @@
 #   LAB_REPOS                    space-separated OWNER/REPO list for the secrets (default: statline-infra)
 #   SKIP_GH=1                    only write ~/.aws/credentials, don't touch GitHub
 #   AWS_SHARED_CREDENTIALS_FILE  honored like the AWS CLI does
+#   AWS_CONFIG_FILE              honored too; gets region = us-east-1 for the profile
 set -euo pipefail
 
 PROFILE="${AWS_PROFILE:-statline-lab}"
@@ -86,6 +87,13 @@ write_profile() {
   chmod 600 "$CREDS_FILE"
 }
 
+# The region lives in ~/.aws/config ([profile statline-lab]); the credentials file can't hold it.
+# Without it, aws commands outside make (RUNBOOK 2.2) fail with NoRegion.
+write_region() {
+  aws configure set region "$REGION" --profile "$PROFILE"
+  log "Region $REGION set for profile $PROFILE"
+}
+
 check_identity() {
   log "Checking the credentials with sts get-caller-identity"
   local account
@@ -123,5 +131,6 @@ push_github_secrets() {
 
 read_block
 write_profile
+write_region
 check_identity
 push_github_secrets
