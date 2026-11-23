@@ -14,6 +14,7 @@ Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** 
 ## Decisiones que faltan al desplegar prod
 
 - Respaldo en prod: decidido, activo como en staging (D-41).
+- Datos de demo en prod: decidido, `seed-demo` también en prod para que sus modelos entrenen (D-42; RUNBOOK §3 con `ENV=prod`).
 - `networkPolicies.kubeApiCidr` solo si se usa `api.ingestaLanzador: kubernetes`.
 
 ## Configuración en GitHub y AWS (lista)
@@ -28,7 +29,7 @@ Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** 
 
 | Riesgo | Impacto | Plan B |
 |---|---|---|
-| Dependencia de la API externa | Alto | El plan gratuito de API-Sports solo cubre 2022–2024; un error de plan cambia la corrida al respaldo (backend D-38). Staging recibe partidos reales de balldontlie y TheSportsDB, sin estadísticas de jugadores (backend D-39). Los modelos se entrenan con `ingesta seed-demo` |
+| Dependencia de la API externa | Alto | El plan gratuito de API-Sports solo cubre 2022–2024; un error de plan cambia la corrida al respaldo (backend D-38). Staging recibe partidos reales de balldontlie y TheSportsDB, sin estadísticas de jugadores (backend D-39). Los modelos se entrenan con `ingesta seed-demo`, también en prod (D-42) |
 | Lab: fin de sesión con el ambiente arriba | Alto | Al terminar la sesión el lab detiene y reemplaza los nodos; si no se reinicia pronto, no se vuelven a unir al clúster y todo sigue cobrando. `make destroy` antes de que acabe el tiempo; si ya pasó, `make creds` y reiniciar los nodos (RUNBOOK §8) |
 | `make destroy` atorado | Medio | `scripts/vaciar-gitops.sh` borra las Applications y los ExternalSecrets antes de los charts; si un uninstall se atora igual, RUNBOOK §8 explica cómo quitar los finalizers |
 | Agotamiento del presupuesto del lab (USD 50) | Crítico | 2 nodos t3.medium y RDS db.t3.micro (~USD 0.31/h), sin NAT gateway, `make destroy` al terminar cada sesión; revisar el gasto del lab en cada sesión |

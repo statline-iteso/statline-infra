@@ -49,6 +49,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-39 | 2026-11-22 | Staging uses the `letsencrypt-prod` ClusterIssuer too; `letsencrypt-staging` stays for testing issuance | Decided |
 | D-40 | 2026-11-23 | Staging ingests through the fallback providers (`fallbackHabilitado: "true"`): balldontlie for NBA, TheSportsDB for NFL and Liga MX. Prod stays off | Superseded in part by D-41 |
 | D-41 | 2026-11-23 | Prod also ingests through the fallback providers for v1.0.0 (`fallbackHabilitado: "true"`), with the reasoning of D-40 | Decided |
+| D-42 | 2026-11-23 | Prod gets the synthetic `seed-demo` data too, so its models can train while no provider supplies player box scores | Decided |
 
 ## 2. Details
 
@@ -221,6 +222,9 @@ The free API-Sports plan answers every current request with a plan error, and si
 
 ### D-41 · Prod ingests from the fallback providers too
 For v1.0.0 (SL-61) prod gets the same setting as staging. With fallback off, every prod run would end in the free plan's error and prod would show no real games. The duplicate risk is the same as in D-40, none while API-Sports reports nothing. **Turn fallback off in both environments** before switching to a paid API-Sports key, and verify deduplication (backend D-26) before turning it back on.
+
+### D-42 · Demo data in prod
+The RUNBOOK kept `ingesta seed-demo` out of prod. But the free providers give games with no player box scores (backend D-39, D-40), so prod could train no model and its forecast and projection screens would be empty in the v1.0.0 demo. Prod now gets the same synthetic games as staging, next to the real fallback games. **Why it is acceptable:** the synthetic rows use provider `demo` and `demo-` ids (backend D-29), never collide with real games, and the frontend labels them as synthetic. **Revisit** when a paid provider supplies box scores: delete the `demo` rows and retrain on real data. **Rejected:** a prod demo on staging only (the release would ship a prod without forecasts).
 
 ## 3. Known limitations
 
