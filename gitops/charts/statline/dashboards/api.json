@@ -272,7 +272,7 @@
       "id": 4,
       "type": "stat",
       "title": "Cache hit ratio",
-      "description": "Pending: the api does not expose statline_cache_requests_total yet, so this shows No data.",
+      "description": "Share of catalog cache lookups that were hits (statline_cache_requests_total). Shows No data until the first hit in the window.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -559,8 +559,8 @@
     {
       "id": 8,
       "type": "timeseries",
-      "title": "Cache requests by result (pending metric)",
-      "description": "Pending: statline_cache_requests_total is not exposed by the api yet.",
+      "title": "Cache requests by result",
+      "description": "Catalog cache lookups per second by result: hit, miss, or bypass (Redis unset or failing). From statline_cache_requests_total.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
