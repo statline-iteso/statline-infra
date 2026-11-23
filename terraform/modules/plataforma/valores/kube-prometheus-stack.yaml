@@ -76,9 +76,10 @@ grafana:
       label: grafana_dashboard
       labelValue: "1"
       searchNamespace: ALL
+  # Grafana 13 sits at ~255Mi idle: a 256Mi limit starved it (health checks timing out, UI stuck loading).
   resources:
     requests:
       cpu: 50m
-      memory: 128Mi
-    limits:
       memory: 256Mi
+    limits:
+      memory: 512Mi
