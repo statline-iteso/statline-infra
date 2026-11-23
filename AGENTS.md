@@ -96,7 +96,7 @@ statline-infra/
 │       └── plataforma/      namespaces, five helm_release, database Job
 ├── gitops/                  Helm charts (statline, redis) + values per environment + Argo CD Applications
 ├── k3d/                     local cluster config
-├── scripts/                 lab-creds.sh · check-creds.sh · bootstrap-account.sh · backend-config.sh · esperar-nlb.sh · k3d-up.sh · bump-image-tags.sh · smoke.sh
+├── scripts/                 lab-creds.sh · check-creds.sh · bootstrap-account.sh · backend-config.sh · esperar-nlb.sh · vaciar-gitops.sh · k3d-up.sh · bump-image-tags.sh · smoke.sh
 └── .github/workflows/       ci.yml · cd.yml (tag bump PRs) · auto-merge.yml
 ```
 
