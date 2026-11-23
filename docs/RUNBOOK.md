@@ -99,11 +99,12 @@ Grafana: `kubectl -n plataforma port-forward svc/kube-prometheus-stack-grafana 3
 
 ## 3. First data and models
 
-Log in as the seeded admin and keep the token in a variable:
+Each environment has its own database, so run this section once per environment. Set the environment, log in as the seeded admin and keep the token in a variable:
 
 ```bash
-H=https://staging.<ip>.nip.io
-read -rs PASS                     # /statline/staging/seed-admin-password (2.2)
+ENV=staging                       # or prod
+H=https://staging.<ip>.nip.io     # prod: https://<ip>.nip.io
+read -rs PASS                     # /statline/$ENV/seed-admin-password (2.2)
 TOKEN=$(curl -s "$H/api/auth/login" -H 'content-type: application/json' \
   -d "{\"email\":\"admin@statline.local\",\"password\":\"$PASS\"}" | jq -r .accessToken); unset PASS
 ```
@@ -111,8 +112,8 @@ TOKEN=$(curl -s "$H/api/auth/login" -H 'content-type: application/json' \
 **Ingest.** The CronJobs run on their schedule (`0 8 * * *` NBA, `0 8 * * 2` NFL, `0 8 * * 1,5` Liga MX). To run one now:
 
 ```bash
-kubectl -n statline-staging create job ingesta-nba-$(date +%s) --from=cronjob/statline-staging-ingesta-basquetbol
-kubectl -n statline-staging logs -f job/<that job>
+kubectl -n statline-$ENV create job ingesta-nba-$(date +%s) --from=cronjob/statline-$ENV-ingesta-basquetbol
+kubectl -n statline-$ENV logs -f job/<that job>
 ```
 
 Do this once per sport on the first deploy: the NFL, Liga MX and fallback mappings come from provider docs and have never seen a live response (backend D-24, D-25, D-27). A mapping error shows up as discarded lines or a failed `ejecucion_ingesta` row (`GET $H/api/ingestas`). Save the failing response as a fixture and fix the adapter.
@@ -132,17 +133,17 @@ done
 
 A model is activated only if it beats its baseline (backend D-31): `activado: false` with a `motivo` is a valid answer. Training can outlast the api's 30 s proxy timeout (503) while predicciones still finishes; check `GET $H/api/modelos`.
 
-**With the free API-Sports plan** a run switches to the fallback providers (DECISIONS D-40): staging gets real games from balldontlie and TheSportsDB, with no NFL or Liga MX box scores. That is not enough to train every model, so use the demo data below for the models.
+**With the free API-Sports plan** a run switches to the fallback providers (DECISIONS D-40, D-41): both environments get real games from balldontlie and TheSportsDB, with no NFL or Liga MX box scores. That is not enough to train every model, so use the demo data below for the models.
 
-**Without enough real games (demo only, staging only).** `ingesta seed-demo` writes synthetic games marked `demo` (backend D-29), enough for every model to activate. Run it as a one-off Job from the NBA CronJob spec, which already has the database secret:
+**Without enough real games (both environments, D-42).** `ingesta seed-demo` writes synthetic games marked `demo` (backend D-29), enough for every model to activate; the frontend labels them as synthetic. Run it as a one-off Job from the NBA CronJob spec, which already has the database secret:
 
 ```bash
-kubectl -n statline-staging create job demo-seed --from=cronjob/statline-staging-ingesta-basquetbol --dry-run=client -o json \
+kubectl -n statline-$ENV create job demo-seed --from=cronjob/statline-$ENV-ingesta-basquetbol --dry-run=client -o json \
   | jq '.spec.template.spec.containers[0].args = ["seed-demo","--confirmar"]' | kubectl apply -f -
-kubectl -n statline-staging logs -f job/demo-seed
+kubectl -n statline-$ENV logs -f job/demo-seed
 ```
 
-Then train and generate as above. Never run it in prod.
+Then train and generate as above. In prod, run it only while no real provider supplies player box scores (D-42).
 
 ## 4. Post-deploy smoke tests
 
