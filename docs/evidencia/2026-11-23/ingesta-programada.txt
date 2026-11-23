@@ -1,0 +1,16 @@
+== ingesta-basquetbol-1795403619 ok= fail=1
+2026-11-23 03:13:49,447 WARNING ingesta.adaptadores.con_respaldo proveedor api-sports no disponible (/games: Free plans do not have access to this season, try from 2022 to 2024.); se usa balldontlie para el resto de la corrida
+ingesta.adaptadores.respaldo.RespuestaRespaldoError: /stats: HTTP 401
+2026-11-23 03:13:49,707 INFO ingesta resultado ResultadoEjecucion(ejecucion_id='b3f2632a-8b6b-416f-909c-7db5153fa62e', exitosa=False, partidos=1, estadisticas=0, descartadas=0, error='RespuestaRespaldoError: /stats: HTTP 401')
+== ingesta-americano-1795403619 ok=1 fail=
+2026-11-23 03:13:49,384 WARNING ingesta.adaptadores.con_respaldo proveedor api-sports no disponible (/games: Free plans do not have access to this season, try from 2022 to 2024.); se usa thesportsdb para el resto de la corrida
+2026-11-23 03:13:49,463 INFO ingesta resultado ResultadoEjecucion(ejecucion_id='9bf49275-f8d8-4333-b6ce-175ab6368fe9', exitosa=True, partidos=4, estadisticas=0, descartadas=0, error=None)
+== ingesta-futbol-1795403619 ok=1 fail=
+2026-11-23 03:13:49,274 WARNING ingesta.adaptadores.con_respaldo proveedor api-sports no disponible (/fixtures: Free plans do not have access to this season, try from 2022 to 2024.); se usa thesportsdb para el resto de la corrida
+2026-11-23 03:13:49,347 INFO ingesta resultado ResultadoEjecucion(ejecucion_id='79c2d50b-5835-41e0-a43f-2149ebcf44df', exitosa=True, partidos=4, estadisticas=0, descartadas=0, error=None)
+
+== ingesta-basquetbol-1795404238 (image dffbbc0, backend #63) ok=1 fail=
+2026-11-23 03:24:08,135 INFO httpx HTTP Request: GET https://api.balldontlie.io/v1/stats?game_ids%5B%5D=21718162&per_page=100 "HTTP/1.1 401 Unauthorized"
+2026-11-23 03:24:08,135 WARNING ingesta.adaptadores.balldontlie balldontlie sin acceso a /stats (/stats: HTTP 401): partidos sin estadisticas
+2026-11-23 03:24:08,304 INFO httpx HTTP Request: GET https://api.balldontlie.io/v1/games?dates%5B%5D=2026-11-23&per_page=100 "HTTP/1.1 200 OK"
+2026-11-23 03:24:08,354 INFO ingesta resultado ResultadoEjecucion(ejecucion_id='a332dc05-d5c0-475e-91c6-509b744ee2a9', exitosa=True, partidos=17, estadisticas=0, descartadas=0, error=None)
