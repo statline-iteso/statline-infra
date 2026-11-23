@@ -28,7 +28,7 @@ secrets:
 # Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
 web:
   image:
-    tag: "0000000"
+    tag: "cf0a25d"
 api:
   autoscaling:
     enabled: true
