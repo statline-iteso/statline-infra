@@ -268,7 +268,7 @@ Staging and prod use `syncPolicy.retry.limit: 2` with backoff from 10 s (factor 
 
 ## 8. Tear down (end of every session)
 
-`make destroy` removes the whole `principal` stack, the database included (D-16). The S3 state bucket and the Elastic IP from `make bootstrap` stay (the IP keeps the nip.io hosts valid, about USD 3.60/month), so the next session needs only `make creds`, `make apply-eks` and `make apply`. The destroy removes the platform charts first and waits for the ingress NLB to disappear (`scripts/esperar-nlb.sh`); otherwise its network interfaces would block deleting the VPC.
+`make destroy` removes the whole `principal` stack, the database included (D-16). The S3 state bucket and the Elastic IP from `make bootstrap` stay (the IP keeps the nip.io hosts valid, about USD 3.60/month), so the next session needs only `make creds`, `make apply-eks` and `make apply`. The destroy first deletes the Argo CD Applications and ExternalSecrets while their controllers still run (`scripts/vaciar-gitops.sh`), then removes the platform charts and waits for the ingress NLB to disappear (`scripts/esperar-nlb.sh`); otherwise its network interfaces would block deleting the VPC.
 
 1. **Keep the data, if it matters.** PostgreSQL is private and the namespaces are default-deny, so dump from a Job built from the NBA CronJob: it keeps the labels the PostgreSQL egress rule allows and `DATABASE_URL` from `statline-secrets`; only the image and the command change.
    ```bash
@@ -294,6 +294,12 @@ Staging and prod use `syncPolicy.retry.limit: 2` with backoff from 10 s (factor 
    aws ec2 describe-instances --filters Name=instance-state-name,Values=running --query 'Reservations[].Instances[].InstanceId'   # []
    ```
    If the lab session ends mid-destroy, run `make creds` and `make destroy` again: Terraform resumes from the state in S3.
+
+   **A chart uninstall times out** (`context deadline exceeded`, for example on `external_secrets`): an object still carries the finalizer of a controller that is already gone, so its CRD or namespace cannot be deleted. `scripts/vaciar-gitops.sh` prevents this; if it happens anyway, clear the leftover finalizers (the cluster is being destroyed, nothing else depends on them) and rerun `make destroy`:
+   ```bash
+   kubectl get externalsecrets.external-secrets.io -A -o name 2>/dev/null   # and applications.argoproj.io in plataforma
+   kubectl -n <ns> patch <object> --type=merge -p '{"metadata":{"finalizers":null}}'
+   ```
 
 ## 9. Evidence for SL-60
 

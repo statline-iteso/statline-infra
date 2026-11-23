@@ -67,6 +67,8 @@ kubeconfig: check-creds ## Write the eks-statline context to ~/.kube/config
 destroy: init ## ⚠ Destroy the principal stack (bootstrap bucket and Elastic IP stay)
 	$(TF) -chdir=$(PRINCIPAL) plan -destroy -input=false
 	@[[ "$${CONFIRM:-}" == "yes" ]] || { read -rp "Destroy everything above? [y/N] " a; [[ "$$a" == y ]]; }
+	@# Argo CD Applications and ExternalSecrets go first, while their controllers can clear their finalizers.
+	scripts/vaciar-gitops.sh
 	@# The ingress NLB is created by the cluster, not Terraform: remove the charts, wait for it to go.
 	$(TF) -chdir=$(PRINCIPAL) destroy -input=false -auto-approve -target=module.plataforma
 	scripts/esperar-nlb.sh
