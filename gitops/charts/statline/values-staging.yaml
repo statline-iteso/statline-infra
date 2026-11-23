@@ -10,7 +10,8 @@ ingress:
   tls:
     enabled: true
     secretName: statline-tls
-    clusterIssuer: letsencrypt-staging
+    # letsencrypt-prod since D-39: the staging issuer's untrusted chain broke browsers and the public smoke check.
+    clusterIssuer: letsencrypt-prod
 
 redis:
   dbIndex: 1
