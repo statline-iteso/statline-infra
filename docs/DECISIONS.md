@@ -46,6 +46,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-36 | 2026-11-19 | App repos only build and push images and send `repository_dispatch`; this repo's `cd.yml` writes the tags (awk, in place) on one rolling `gitops/bump-<env>` branch and opens a PR (staging: auto-merged when CI passes; prod: manual review). Branch protection is not relaxed | Decided |
 | D-37 | 2026-11-19 | Leagues and the first ADMIN come from the api image's seed, run as a second initContainer; the admin password is a per-environment `random_password` in Key Vault | Decided (password in SSM since D-38) |
 | D-38 | 2026-11-21 | Move from Azure to the AWS Learner Lab (Azure credits denied): EKS with `LabRole`, RDS PostgreSQL, SSM Parameter Store + External Secrets, an Elastic IP + nip.io for the ingress; S3 state with native locking. Supersedes D-02 and the Azure-specific parts of later decisions | Decided |
+| D-39 | 2026-11-22 | Staging uses the `letsencrypt-prod` ClusterIssuer too; `letsencrypt-staging` stays for testing issuance | Decided |
 
 ## 2. Details
 
@@ -209,6 +210,9 @@ The mapping, landed in steps:
 Cost while up, list prices: EKS 0.10 + 2 × t3.medium 0.083 + RDS 0.018 + NLB 0.023 + public IPv4 ≈ 0.015 → **about USD 0.31/h**, so the USD 50 covers roughly 150 hours. Check it against the lab's cost readout.
 
 **Rejected:** a new Azure free account (credits denied), k3s on EC2 (not a managed cluster), Terraform-written Kubernetes Secrets (no secret store outside the cluster), the AWS Load Balancer Controller and Cluster Autoscaler (each needs its own IAM role), a NAT gateway (about USD 1/day).
+
+### D-39 · Trusted certificates in staging
+Staging used `letsencrypt-staging`, whose chain no browser or curl trusts: every page showed a warning (unusable for demos and evidence) and `scripts/smoke.sh` failed with status 000 unless given the test roots. Both environments now use `letsencrypt-prod`. **Risk:** nip.io is not on the Public Suffix List, so Let's Encrypt's 50 certificates per registered domain per week is shared by every nip.io user, and an issuance can fail with `rateLimited` (prod has the same exposure). cert-manager keeps retrying; if it stays blocked, switch that environment back to `letsencrypt-staging` and say so in the evidence. **Kept:** the `letsencrypt-staging` ClusterIssuer, for testing a new host or issuer setting without spending real issuances. **Rejected:** `curl -k` or a CA bundle in the smoke script (hides real TLS failures).
 
 ## 3. Known limitations
 
