@@ -197,8 +197,8 @@ ingesta:
     temporadaFutbol: "2026"
     # API-Sports free plan quota per day.
     apiSportsDailyQuota: "100"
-    # TheSportsDB public test key.
-    thesportsdbApiKey: "3"
+    # TheSportsDB public test key ("3" was retired, HTTP 403).
+    thesportsdbApiKey: "123"
     # Fallback providers can duplicate games: keep "false" until deduplication is verified.
     fallbackHabilitado: "false"
   secretKeys:

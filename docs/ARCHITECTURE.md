@@ -177,7 +177,7 @@ Source of truth: backend `docs/ARCHITECTURE.md §8`. Summary:
 |---|---|---|---|---|
 | `statline/api` | 3000 | `/healthz`, `/readyz` | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL`, `CACHE_TTL_S` (60), `RATE_LIMIT_PER_MIN` (300), `RATE_LIMIT_LOGIN_PER_MIN` (10), `INGESTA_LANZADOR` (`deshabilitado`), `INGESTA_CRONJOB_PREFIJO` (`<release>-`, set by the chart) | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` |
 | `statline/predicciones` | 8000 | `/healthz`, `/readyz` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `DATABASE_URL` |
-| `statline/ingesta` | 8080 (`serve`) | `/healthz`, `/readyz` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA`, `THESPORTSDB_API_KEY` (3), `FALLBACK_HABILITADO` (`false`) | `DATABASE_URL`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY` (optional) |
+| `statline/ingesta` | 8080 (`serve`) | `/healthz`, `/readyz` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA`, `THESPORTSDB_API_KEY` (123), `FALLBACK_HABILITADO` (`false`) | `DATABASE_URL`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY` (optional) |
 | `statline/web` | 8080 | `/healthz` | — | — |
 
 `/readyz` of the api also checks Redis when `REDIS_URL` is set. The api trusts one proxy hop (ingress-nginx, `trust proxy` = 1). With `api.ingestaLanzador: kubernetes` the chart mounts the ServiceAccount token and renders a Role (`get` on `cronjobs`, `create` on `jobs`, group `batch`) and RoleBinding in the release namespace; otherwise none of that is rendered (D-30).
