@@ -1,71 +1,102 @@
-# Everything StatLine runs on, in one stack (proposal §4.1). One AKS cluster hosts the
-# statline-staging and statline-prod namespaces; one PostgreSQL server hosts their databases.
+# Everything StatLine runs on, in one stack (proposal §4.1), on the AWS Learner Lab (D-38). One EKS
+# cluster hosts the statline-staging and statline-prod namespaces; one RDS instance hosts their
+# databases. The state bucket and the ingress Elastic IP live in the bootstrap stack.
 
-provider "azurerm" {
-  features {
-    key_vault {
-      purge_soft_delete_on_destroy = false
+provider "aws" {
+  region = var.region
+
+  default_tags {
+    tags = local.tags
+  }
+}
+
+# Kubernetes and Helm talk to the cluster created in module eks. The token comes from
+# `aws eks get-token` on every call (it expires after 15 minutes, shorter than a full apply). On a
+# cluster that does not exist yet these values are unknown at plan time: apply module eks first
+# (`make apply-eks`), see README "First apply".
+provider "kubernetes" {
+  host                   = module.eks.endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_ca_certificate)
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.region]
+  }
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = module.eks.endpoint
+    cluster_ca_certificate = base64decode(module.eks.cluster_ca_certificate)
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.region]
     }
   }
-  subscription_id = var.subscription_id
 }
 
-resource "random_string" "suffix" {
-  length  = 5
-  special = false
-  upper   = false
-}
-
-resource "azurerm_resource_group" "main" {
-  name     = "rg-${local.name}"
-  location = var.location
-  tags     = local.tags
+# Created once by the bootstrap stack (make bootstrap); kept across make destroy.
+data "aws_eip" "ingress" {
+  filter {
+    name   = "tag:Name"
+    values = ["${local.name}-ingress"]
+  }
 }
 
 module "red" {
-  source              = "../modules/red"
-  name                = local.name
-  resource_group_name = azurerm_resource_group.main.name
-  location            = var.location
-  address_space       = "10.0.0.0/16"
-  tags                = local.tags
+  source       = "../modules/red"
+  name         = local.name
+  cluster_name = local.name
+  azs          = var.azs
 }
 
-module "aks" {
-  source              = "../modules/aks"
+# Log groups first, so EKS and RDS write into groups with short retention.
+module "observabilidad" {
+  source         = "../modules/observabilidad"
+  cluster_name   = local.name
+  db_identifier  = local.db_identifier
+  retention_days = var.log_retention_days
+}
+
+module "eks" {
+  source              = "../modules/eks"
   name                = local.name
-  resource_group_name = azurerm_resource_group.main.name
-  location            = var.location
-  subnet_id           = module.red.aks_subnet_id
   kubernetes_version  = var.kubernetes_version
-  node_vm_size        = var.node_vm_size
-  node_min_count      = 2
-  node_max_count      = 4
-  tags                = local.tags
+  public_subnet_id    = module.red.public_subnet_id
+  private_subnet_ids  = module.red.private_subnet_ids
+  public_access_cidrs = var.cluster_public_access_cidrs
+  node_instance_type  = var.node_instance_type
+  node_count          = var.node_count
+
+  depends_on = [module.observabilidad]
 }
 
 module "datos" {
-  source              = "../modules/datos"
-  name                = local.name
-  suffix              = random_string.suffix.result
-  resource_group_name = azurerm_resource_group.main.name
-  location            = var.location
-  subnet_id           = module.red.postgres_subnet_id
-  private_dns_zone_id = module.red.postgres_private_dns_zone_id
-  tags                = local.tags
+  source                    = "../modules/datos"
+  name                      = local.name
+  identifier                = local.db_identifier
+  vpc_id                    = module.red.vpc_id
+  private_subnet_ids        = module.red.private_subnet_ids
+  cluster_security_group_id = module.eks.cluster_security_group_id
 
-  depends_on = [module.red]
+  depends_on = [module.observabilidad]
 }
 
-# ── Pending (second half, see docs/BACKLOG.md) ──────────────────────────────
-#
-# TODO(SL-09) module "seguridad": Key Vault (RBAC, purge protection), secrets DATABASE_URL
-#   (module.datos.database_url), JWT_SECRET, JWT_REFRESH_SECRET, API_SPORTS_KEY, and
-#   "Key Vault Secrets User" for module.aks.key_vault_csi_identity_object_id.
-#
-# TODO(SL-10) module "observabilidad": log_analytics_workspace + diagnostic_settings for AKS,
-#   PostgreSQL and Key Vault; then wire oms_agent in module aks.
-#
-# TODO(SL-12) module "dns": dns_zone + A record to the ingress public_ip.
-#   module "plataforma": helm_release ingress-nginx, cert-manager, argo-cd,
-#   kube-prometheus-stack and redis (Bitnami), using module.aks.kube_config.
+module "seguridad" {
+  source        = "../modules/seguridad"
+  prefix        = "/${local.name}"
+  database_urls = module.datos.database_urls
+}
+
+module "plataforma" {
+  source = "../modules/plataforma"
+
+  ingress_eip_allocation_id = data.aws_eip.ingress.id
+  db_address                = module.datos.address
+  db_admin_url              = module.datos.admin_url
+  bases_de_datos            = module.datos.database_names
+
+  # Charts need nodes to schedule on, and CoreDNS.
+  depends_on = [module.eks]
+}

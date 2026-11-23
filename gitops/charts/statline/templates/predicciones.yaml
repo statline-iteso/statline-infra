@@ -1,0 +1,106 @@
+{{- $c := "predicciones" -}}
+{{- $name := include "statline.fullname" (dict "component" $c "ctx" $) -}}
+{{- $tag := .Values.predicciones.image.tag -}}
+{{- $labels := include "statline.labels" (dict "component" $c "ctx" $ "version" $tag) -}}
+{{- define "statline.predicciones.config" -}}
+ARTEFACTOS_DIR: {{ .Values.predicciones.config.artefactosDir | quote }}
+LOG_LEVEL: {{ .Values.predicciones.config.logLevel | quote }}
+{{- end -}}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+automountServiceAccountToken: {{ .Values.predicciones.serviceAccount.automount }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+data:
+  {{- include "statline.predicciones.config" . | nindent 2 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  {{- if not .Values.predicciones.autoscaling.enabled }}
+  # The HPA owns the count when enabled (hpa.yaml): spec.replicas is then omitted.
+  replicas: {{ .Values.predicciones.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" $c) | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- $labels | nindent 8 }}
+      annotations:
+        checksum/config: {{ include "statline.predicciones.config" . | sha256sum | quote }}
+        {{- if eq .Values.secrets.mode "plain" }}
+        checksum/secret: {{ include "statline.secretData" . | sha256sum | quote }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: {{ .Values.predicciones.serviceAccount.automount }}
+      securityContext:
+        {{- include "statline.podSecurity" (dict "uid" .Values.predicciones.runAsUser) | nindent 8 }}
+      containers:
+        - name: predicciones
+          image: {{ include "statline.image" (dict "component" $c "image" .Values.predicciones.image "ctx" $) }}
+          imagePullPolicy: {{ .Values.predicciones.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.predicciones.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ $name }}
+          env:
+            {{- include "statline.secretEnv" (dict "keys" .Values.predicciones.secretKeys "secretName" .Values.secrets.name) | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.predicciones.resources | nindent 12 }}
+          securityContext:
+            {{- include "statline.containerSecurity" . | nindent 12 }}
+          # Model artifacts are cached under /tmp (the models themselves live in PostgreSQL).
+          volumeMounts:
+            {{- include "statline.tmpVolumeMount" . | nindent 12 }}
+      volumes:
+        {{- include "statline.tmpVolume" . | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "statline.selectorLabels" (dict "component" $c) | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

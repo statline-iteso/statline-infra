@@ -1,0 +1,100 @@
+{{- if .Values.devPostgres.enabled }}
+{{- $c := "postgres" }}
+{{- $name := include "statline.fullname" (dict "component" $c "ctx" .) }}
+{{- $labels := include "statline.labels" (dict "component" $c "ctx" . "version" "") }}
+# DEV ONLY (k3d). Ephemeral PostgreSQL in the namespace; staging and prod use RDS PostgreSQL.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" $c) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- $labels | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "statline.podSecurity" (dict "uid" 70) | nindent 8 }}
+        fsGroup: 70
+      containers:
+        - name: postgres
+          image: {{ .Values.devPostgres.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.devPostgres.user | quote }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.devPostgres.password | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.devPostgres.database | quote }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.devPostgres.user | quote }}, "-d", {{ .Values.devPostgres.database | quote }}]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.devPostgres.user | quote }}, "-d", {{ .Values.devPostgres.database | quote }}]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            {{- include "statline.containerSecurity" . | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "statline.selectorLabels" (dict "component" $c) | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+{{- end }}

@@ -1,0 +1,28 @@
+# ingress-nginx for EKS. The Service becomes an internet-facing NLB created by the EKS built-in
+# cloud controller (no AWS Load Balancer Controller: it would need its own IAM role, D-38). The NLB
+# takes the bootstrap Elastic IP, so the address (and the nip.io hosts) survive make destroy. The
+# controller places it in the one public subnet (module red), which matches one EIP.
+controller:
+  replicaCount: 1
+  ingressClassResource:
+    name: nginx
+    default: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 90Mi
+    limits:
+      memory: 256Mi
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  service:
+    # Local keeps the client source IP (NLB instance targets preserve it), so X-Forwarded-For
+    # carries the real address and the api's per-IP rate limits work. The NLB only sends traffic
+    # to nodes running a controller pod (checked through healthCheckNodePort).
+    externalTrafficPolicy: Local
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: nlb
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+      service.beta.kubernetes.io/aws-load-balancer-eip-allocations: "${eip_allocation_id}"

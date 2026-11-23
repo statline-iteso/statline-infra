@@ -1,0 +1,59 @@
+name: Auto-merge
+
+# PRs opened by Pardosito into develop are approved and squash-merged automatically once every
+# required CI check passes on the exact head commit. So are the staging tag-bump PRs that cd.yml
+# opens from gitops/bump-staging, but only when they change nothing but values-staging.yaml (D-36). Nothing from the PR is checked out or run here,
+# so pull_request_target is safe. Releases into main still go through a manual review.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [develop]
+
+concurrency:
+  group: auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  merge:
+    name: approve and merge
+    if: >-
+      !github.event.pull_request.draft &&
+      (github.event.pull_request.user.login == 'Pardosito' ||
+       (github.event.pull_request.head.ref == 'gitops/bump-staging' &&
+        github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Tag-bump PRs may only change the staging values file
+        if: github.event.pull_request.head.ref == 'gitops/bump-staging'
+        run: |
+          # The exact head commit that the merge step pins with --match-head-commit.
+          files=$(gh api "repos/$GH_REPO/compare/develop...$SHA" --jq '.files[].filename')
+          if [[ "$files" != "gitops/charts/statline/values-staging.yaml" ]]; then
+            echo "::error::gitops/bump-staging changes more than values-staging.yaml:"
+            echo "$files"
+            exit 1
+          fi
+      - name: Approve
+        run: gh pr review "$PR" --approve --body "Auto-approved; merges when CI is green."
+      - name: Wait for required checks
+        run: |
+          sleep 30  # let the CI runs register their checks
+          gh pr checks "$PR" --required --watch --fail-fast --interval 30
+      # --match-head-commit: only the commit that CI just validated can be merged.
+      - name: Squash-merge
+        run: gh pr merge "$PR" --squash --delete-branch --match-head-commit "$SHA"
+      # Merges made with GITHUB_TOKEN don't fire push events, so start CI on develop explicitly.
+      - name: Start CI on develop
+        run: gh workflow run ci.yml --ref develop

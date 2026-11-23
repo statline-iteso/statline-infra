@@ -9,3 +9,4 @@ backend.hcl
 *.kubeconfig
 .env*
 node_modules/
+terraform/bootstrap/archive/

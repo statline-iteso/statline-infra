@@ -1,0 +1,57 @@
+# 2026-11-23T00:27:04Z  kubectl get nodes -o wide
+NAME                          STATUS   ROLES    AGE   VERSION               INTERNAL-IP   EXTERNAL-IP      OS-IMAGE                        KERNEL-VERSION                     CONTAINER-RUNTIME
+ip-10-0-13-121.ec2.internal   Ready    <none>   75m   v1.35.9-eks-9adbfea   10.0.13.121   44.203.142.208   Amazon Linux 2023.12.20261118   6.12.115-140.210.amzn2023.x86_64   containerd://2.3.7+unknown
+ip-10-0-8-99.ec2.internal     Ready    <none>   75m   v1.35.9-eks-9adbfea   10.0.8.99     54.84.126.250    Amazon Linux 2023.12.20261118   6.12.115-140.210.amzn2023.x86_64   containerd://2.3.7+unknown
+
+# kubectl get pods -A
+NAMESPACE          NAME                                                        READY   STATUS      RESTARTS      AGE
+kube-system        aws-node-5w8mh                                              2/2     Running     0             75m
+kube-system        aws-node-rhm6n                                              2/2     Running     0             75m
+kube-system        coredns-577755d76c-rp5l2                                    1/1     Running     0             22h
+kube-system        coredns-577755d76c-tjcvm                                    1/1     Running     0             22h
+kube-system        kube-proxy-87rgf                                            1/1     Running     0             75m
+kube-system        kube-proxy-pps87                                            1/1     Running     0             75m
+kube-system        metrics-server-5b4755cf4c-ldhgg                             1/1     Running     0             22h
+kube-system        metrics-server-5b4755cf4c-st44l                             1/1     Running     0             22h
+plataforma         argo-cd-argocd-application-controller-0                     1/1     Running     0             22h
+plataforma         argo-cd-argocd-applicationset-controller-675d8dd7b9-vqtq9   1/1     Running     0             22h
+plataforma         argo-cd-argocd-redis-75f5cc9cf-lxrm7                        1/1     Running     0             22h
+plataforma         argo-cd-argocd-repo-server-86cb4df654-dx94j                 1/1     Running     0             22h
+plataforma         argo-cd-argocd-server-7bbcd45bbb-r5wgt                      1/1     Running     0             22h
+plataforma         cert-manager-57b6b776fb-dvphs                               1/1     Running     0             22h
+plataforma         cert-manager-cainjector-65645b5bf5-7k8n2                    1/1     Running     0             22h
+plataforma         cert-manager-webhook-56486c5d96-nx6mk                       1/1     Running     0             22h
+plataforma         external-secrets-64fbbdddc-8nxlw                            1/1     Running     0             22h
+plataforma         external-secrets-cert-controller-9787c6484-9w8nj            1/1     Running     0             22h
+plataforma         external-secrets-webhook-7f48fb8ccf-pbq4z                   1/1     Running     0             22h
+plataforma         ingress-nginx-controller-f6bd7b8fb-qwfrk                    1/1     Running     0             22h
+plataforma         kube-prometheus-stack-grafana-75b98c6d9-fhd4z               3/3     Running     3 (66m ago)   22h
+plataforma         kube-prometheus-stack-kube-state-metrics-84757b7fb4-n7nwk   1/1     Running     0             22h
+plataforma         kube-prometheus-stack-operator-c5c859889-gzxd6              1/1     Running     0             22h
+plataforma         kube-prometheus-stack-prometheus-node-exporter-4gmz2        1/1     Running     0             75m
+plataforma         kube-prometheus-stack-prometheus-node-exporter-dgkz9        1/1     Running     0             75m
+plataforma         prometheus-kube-prometheus-stack-prometheus-0               2/2     Running     0             22h
+plataforma         redis-0                                                     1/1     Running     0             22h
+statline-staging   backfill-americano-1795393274-bz9hw                         0/1     Error       0             5m50s
+statline-staging   backfill-basquetbol-1795393213-6srv8                        0/1     Error       0             6m51s
+statline-staging   backfill-basquetbol-1795393272-79zr7                        0/1     Error       0             5m53s
+statline-staging   backfill-futbol-1795393277-p7m4l                            0/1     Error       0             5m47s
+statline-staging   demo-seed-pflx5                                             0/1     Completed   0             4m46s
+statline-staging   ingesta-americano-1795392868-gqg4p                          0/1     Error       0             12m
+statline-staging   ingesta-americano-1795392868-qkhvh                          0/1     Error       0             12m
+statline-staging   ingesta-basquetbol-1795392868-4j66s                         0/1     Error       0             12m
+statline-staging   ingesta-basquetbol-1795392868-74xj2                         0/1     Error       0             12m
+statline-staging   ingesta-futbol-1795392868-pnmjn                             0/1     Error       0             12m
+statline-staging   ingesta-futbol-1795392868-vrw42                             0/1     Error       0             12m
+statline-staging   statline-staging-api-5dc4df9d5f-cdtqp                       1/1     Running     0             34m
+statline-staging   statline-staging-api-5dc4df9d5f-rpdgn                       1/1     Running     0             34m
+statline-staging   statline-staging-predicciones-6b946487f6-j7996              1/1     Running     0             34m
+statline-staging   statline-staging-predicciones-6b946487f6-kz2hq              1/1     Running     0             69s
+statline-staging   statline-staging-predicciones-6b946487f6-txn87              1/1     Running     0             69s
+statline-staging   statline-staging-predicciones-6b946487f6-wx494              1/1     Running     0             69s
+statline-staging   statline-staging-web-696dd8c565-442nb                       1/1     Running     0             34m
+statline-staging   statline-staging-web-696dd8c565-4768r                       1/1     Running     0             34m
+
+# kubectl get externalsecret -A
+NAMESPACE          NAME               STORETYPE            STORE          REFRESH INTERVAL   STATUS         READY   LAST SYNC
+statline-staging   statline-secrets   ClusterSecretStore   statline-ssm   1h                 SecretSynced   True    14m

@@ -1,0 +1,38 @@
+{{- /*
+HorizontalPodAutoscalers (autoscaling/v2) for api and predicciones. When one is enabled, its
+Deployment omits spec.replicas so the HPA owns the count (api.yaml, predicciones.yaml).
+*/ -}}
+{{- $targets := list
+  (dict "component" "api" "cfg" .Values.api.autoscaling "tag" .Values.api.image.tag)
+  (dict "component" "predicciones" "cfg" .Values.predicciones.autoscaling "tag" .Values.predicciones.image.tag)
+-}}
+{{- range $targets }}
+{{- if .cfg.enabled }}
+{{- $name := include "statline.fullname" (dict "component" .component "ctx" $) }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "statline.labels" (dict "component" .component "ctx" $ "version" .tag) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  minReplicas: {{ .cfg.minReplicas }}
+  maxReplicas: {{ .cfg.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .cfg.targetCPUUtilizationPercentage }}
+  behavior:
+    # Scale down only after the load has stayed low for the whole window (conservative).
+    scaleDown:
+      stabilizationWindowSeconds: {{ .cfg.scaleDownStabilizationSeconds }}
+{{- end }}
+{{- end }}

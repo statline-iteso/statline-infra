@@ -2,11 +2,12 @@
 
 The whole project backlog (proposal §6): **61 issues, 277 story points, nine epics**. Each issue lives in the repo that owns the work; the [GitHub Project](https://github.com/orgs/statline-iteso/projects) shows all of them on one board with the fields Épica, Sprint, Estimación and Prioridad. Per-repo views: [backend](https://github.com/statline-iteso/statline-backend/blob/develop/docs/BACKLOG.md) · [frontend](https://github.com/statline-iteso/statline-frontend/blob/develop/docs/BACKLOG.md).
 
-**Progress:** 32 of 61 issues done · 144 of 277 points.
+**Progress:** 60 of 61 issues done · 273 of 277 points.
 
 **How to read it**
 
-- ✅ done in the first half · ⏳ pending (second half, Ian Rodríguez).
+- ✅ done (first half: Juan Pablo González; second half: Ian Rodríguez) · ⏳ pending.
+- An unticked criterion on a ✅ issue was met in a different way; its note says how and links the decision.
 - One issue = one PR (`feature/<issue>-<desc>` → `develop`, squash merge, `Closes #N`).
 - Board columns: Backlog → Listo para trabajar → En progreso → En revisión → Terminado.
 
@@ -15,15 +16,15 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 | Epic | Name | Issues | Points | Done |
 |---|---|---|---|---|
 | E1 | Cimientos del repositorio | 4 | 14 | 14 |
-| E2 | Infraestructura con Terraform | 8 | 42 | 28 |
-| E3 | Servicio de ingesta | 9 | 45 | 29 |
-| E4 | API y modelo de datos | 10 | 48 | 28 |
-| E5 | Servicio de predicciones | 8 | 38 | 5 |
-| E6 | Frontend | 9 | 36 | 19 |
-| E7 | Pipeline de CI/CD | 5 | 24 | 17 |
-| E8 | Observabilidad y resiliencia | 5 | 18 | 0 |
-| E9 | Documentación y entrega | 3 | 12 | 4 |
-| **Total** | | **61** | **277** | **144** |
+| E2 | Infraestructura con Terraform | 8 | 42 | 42 |
+| E3 | Servicio de ingesta | 9 | 45 | 45 |
+| E4 | API y modelo de datos | 10 | 48 | 48 |
+| E5 | Servicio de predicciones | 8 | 38 | 38 |
+| E6 | Frontend | 9 | 36 | 36 |
+| E7 | Pipeline de CI/CD | 5 | 24 | 24 |
+| E8 | Observabilidad y resiliencia | 5 | 18 | 18 |
+| E9 | Documentación y entrega | 3 | 12 | 8 |
+| **Total** | | **61** | **277** | **273** |
 
 ## Sprints
 
@@ -82,6 +83,8 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 
 ## E2 · Infraestructura con Terraform
 
+> **Movida a AWS (2026-11-21, D-38, [#50](https://github.com/statline-iteso/statline-infra/issues/50)).** Se negaron los créditos de Azure, así que las issues de esta épica se cerraron en Azure y después se rehicieron en AWS Learner Lab, sin issue nueva por módulo: `aks` pasó a `eks` (EKS 1.35, `LabRole`, 2 × t3.medium fijos), la Flexible Server a RDS db.t3.micro, Key Vault y el CSI driver (SL-09, SL-58) a SSM Parameter Store y External Secrets, Log Analytics (SL-10) a CloudWatch, el estado (SL-11) a S3 con bloqueo nativo, y la IP del ingress (SL-12) a una IP elástica con nip.io; el módulo `dns` se eliminó. Los criterios de abajo quedan como se aceptaron en Azure.
+
 ### ✅ [SL-05](https://github.com/statline-iteso/statline-infra/issues/3) · Módulo bootstrap: resource group, storage account y contenedor de estado
 
 **Sprint:** S1 · **Points:** 5 · **Priority:** Crítica · **Repo:** `statline-infra`
@@ -122,24 +125,24 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 - [x] Base `statline` y extensiones permitidas
 - [x] Contraseña de administrador generada (`random_password`) y expuesta solo como output sensible
 
-### ⏳ [SL-09](https://github.com/statline-iteso/statline-infra/issues/7) · Módulo seguridad: Key Vault, secretos y políticas de acceso
+### ✅ [SL-09](https://github.com/statline-iteso/statline-infra/issues/7) · Módulo seguridad: Key Vault, secretos y políticas de acceso
 
 **Sprint:** S2 · **Points:** 5 · **Priority:** Alta · **Repo:** `statline-infra`
 
 **Acceptance criteria**
 
-- [ ] `azurerm_key_vault` con RBAC, purge protection y acceso de red restringido
-- [ ] Secretos: DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET, API_SPORTS_KEY
-- [ ] Rol `Key Vault Secrets User` para la identidad del CSI driver
+- [ ] `azurerm_key_vault` con RBAC, purge protection y acceso de red restringido — *cambió: RBAC sí; purge protection apagada y endpoint público, para poder recrear el stack y por costo (D-18)*
+- [x] Secretos: DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET, API_SPORTS_KEY
+- [x] Rol `Key Vault Secrets User` para la identidad del CSI driver
 
-### ⏳ [SL-10](https://github.com/statline-iteso/statline-infra/issues/8) · Módulo observabilidad: Log Analytics y diagnostic settings
+### ✅ [SL-10](https://github.com/statline-iteso/statline-infra/issues/8) · Módulo observabilidad: Log Analytics y diagnostic settings
 
 **Sprint:** S2 · **Points:** 3 · **Priority:** Media · **Repo:** `statline-infra`
 
 **Acceptance criteria**
 
-- [ ] `log_analytics_workspace` con retención de 30 días
-- [ ] `diagnostic_settings` para AKS, PostgreSQL y Key Vault hacia Log Analytics
+- [x] `log_analytics_workspace` con retención de 30 días
+- [x] `diagnostic_settings` para AKS, PostgreSQL y Key Vault hacia Log Analytics
 
 ### ✅ [SL-11](https://github.com/statline-iteso/statline-infra/issues/9) · Configurar backend remoto Azure Storage para state locking en Terraform
 
@@ -151,15 +154,15 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 - [x] `backend.hcl` generado por `make backend-config` (gitignored) desde los outputs del bootstrap
 - [x] Bloqueo por lease del blob comprobado con dos `plan` simultáneos
 
-### ⏳ [SL-12](https://github.com/statline-iteso/statline-infra/issues/10) · Módulos dns y plataforma: zona DNS, IP pública y cinco helm_release
+### ✅ [SL-12](https://github.com/statline-iteso/statline-infra/issues/10) · Módulos dns y plataforma: zona DNS, IP pública y cinco helm_release
 
 **Sprint:** S2 · **Points:** 6 · **Priority:** Alta · **Repo:** `statline-infra`
 
 **Acceptance criteria**
 
-- [ ] `dns_zone` y registro A hacia la `public_ip` del ingress
-- [ ] helm_release: ingress-nginx, cert-manager, argo-cd, kube-prometheus-stack y redis (Bitnami)
-- [ ] Versiones de charts fijadas en variables
+- [x] `dns_zone` y registro A hacia la `public_ip` del ingress
+- [ ] helm_release: ingress-nginx, cert-manager, argo-cd, kube-prometheus-stack y redis (Bitnami) — *cambió: son cuatro `helm_release`; Redis es un chart propio que despliega Argo CD, no Bitnami (D-26)*
+- [x] Versiones de charts fijadas en variables
 
 ## E3 · Servicio de ingesta
 
@@ -201,25 +204,25 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 - [x] `ingesta run basquetbol|americano|futbol [--desde] [--hasta]`; por defecto ayer y hoy (UTC)
 - [x] Código de salida ≠ 0 si la corrida falla, para que el Job quede como fallido
 
-### ⏳ [SL-17](https://github.com/statline-iteso/statline-backend/issues/7) · Adaptador de Liga MX (api-football, liga 262)
+### ✅ [SL-17](https://github.com/statline-iteso/statline-backend/issues/7) · Adaptador de Liga MX (api-football, liga 262)
 
 **Sprint:** S4 · **Points:** 5 · **Priority:** Media · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] `AdaptadorFutbol` implementa `AdaptadorDeporte` con jornada
-- [ ] Métricas normalizadas válidas contra `futbol.schema.json`
-- [ ] Pruebas con fixtures grabados
+- [x] `AdaptadorFutbol` implementa `AdaptadorDeporte` con jornada
+- [x] Métricas normalizadas válidas contra `futbol.schema.json`
+- [ ] Pruebas con fixtures grabados — *cambió: fixtures armados con la documentación de API-Sports, no grabados en vivo: aún no hay API key (backend D-25)*
 
-### ⏳ [SL-18](https://github.com/statline-iteso/statline-backend/issues/8) · Adaptador de NFL (api-american-football, liga 1)
+### ✅ [SL-18](https://github.com/statline-iteso/statline-backend/issues/8) · Adaptador de NFL (api-american-football, liga 1)
 
 **Sprint:** S4 · **Points:** 5 · **Priority:** Media · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] `AdaptadorAmericano` implementa `AdaptadorDeporte` con semana como jornada
-- [ ] Métricas por grupo (pase, carrera, recepción, defensa, pateo) válidas contra `americano.schema.json`
-- [ ] Pruebas con fixtures grabados
+- [x] `AdaptadorAmericano` implementa `AdaptadorDeporte` con semana como jornada
+- [x] Métricas por grupo (pase, carrera, recepción, defensa, pateo) válidas contra `americano.schema.json`
+- [ ] Pruebas con fixtures grabados — *cambió: fixtures armados con la documentación de API-Sports, no grabados en vivo: aún no hay API key (backend D-24)*
 
 ### ✅ [SL-19](https://github.com/statline-iteso/statline-backend/issues/9) · Implementar AdaptadorDeporte para consumo de API-Sports en Python
 
@@ -231,14 +234,14 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 - [x] Cliente API-Sports con reintentos (429/5xx), backoff exponencial y tope de cuota diaria
 - [x] `AdaptadorBasquetbol` (NBA, liga 12) de punta a punta con normalización en pandas
 
-### ⏳ [SL-20](https://github.com/statline-iteso/statline-backend/issues/10) · Proveedores de respaldo: balldontlie.io (NBA) y TheSportsDB (NFL, Liga MX)
+### ✅ [SL-20](https://github.com/statline-iteso/statline-backend/issues/10) · Proveedores de respaldo: balldontlie.io (NBA) y TheSportsDB (NFL, Liga MX)
 
 **Sprint:** S4 · **Points:** 6 · **Priority:** Media · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] Si API-Sports falla o agota la cuota, el ejecutor reintenta con el respaldo
-- [ ] El proveedor usado queda en `ejecucion_ingesta.proveedor`
+- [x] Si API-Sports falla o agota la cuota, el ejecutor reintenta con el respaldo
+- [x] El proveedor usado queda en `ejecucion_ingesta.proveedor`
 
 ### ✅ [SL-21](https://github.com/statline-iteso/statline-backend/issues/11) · Dockerfile multi-etapa de ingesta (usuario no root)
 
@@ -300,51 +303,51 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 - [x] /api/jugadores (?q=, ?deporte=) y /api/partidos (?fecha=, ?jornada=)
 - [x] GET /api/partidos/:id/boxscore separado por equipo
 
-### ⏳ [SL-27](https://github.com/statline-iteso/statline-backend/issues/17) · Crear endpoints de agregación y comparación de atletas (/api/jugadores)
+### ✅ [SL-27](https://github.com/statline-iteso/statline-backend/issues/17) · Crear endpoints de agregación y comparación de atletas (/api/jugadores)
 
 **Sprint:** S4 · **Points:** 5 · **Priority:** Media · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] GET /api/jugadores/:id/promedios (por temporada, consulta JSONB)
-- [ ] GET /api/jugadores/:id/tendencia (últimos N partidos)
-- [ ] GET /api/jugadores/comparar?ids= (2 a 4 jugadores del mismo deporte)
+- [x] GET /api/jugadores/:id/promedios (por temporada, consulta JSONB)
+- [x] GET /api/jugadores/:id/tendencia (últimos N partidos)
+- [x] GET /api/jugadores/comparar?ids= (2 a 4 jugadores del mismo deporte)
 
-### ⏳ [SL-28](https://github.com/statline-iteso/statline-backend/issues/18) · Endpoints de estadísticas y listas de seguimiento
+### ✅ [SL-28](https://github.com/statline-iteso/statline-backend/issues/18) · Endpoints de estadísticas y listas de seguimiento
 
 **Sprint:** S4 · **Points:** 5 · **Priority:** Media · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] /api/estadisticas (?jugadorId=) con CRUD estándar
-- [ ] /api/listas: POST /:id/elementos y DELETE /:id/elementos/:ref; cada usuario ve solo sus listas
+- [x] /api/estadisticas (?jugadorId=) con CRUD estándar
+- [x] /api/listas: POST /:id/elementos y DELETE /:id/elementos/:ref; cada usuario ve solo sus listas
 
-### ⏳ [SL-29](https://github.com/statline-iteso/statline-backend/issues/19) · Endpoints de pronósticos, proyecciones y modelos (proxy a predicciones)
+### ✅ [SL-29](https://github.com/statline-iteso/statline-backend/issues/19) · Endpoints de pronósticos, proyecciones y modelos (proxy a predicciones)
 
 **Sprint:** S4 · **Points:** 4 · **Priority:** Media · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] /api/pronosticos y /api/proyecciones (?jornada=, ?deporte=) con POST /generar y GET /precision
-- [ ] /api/modelos con POST /:id/activar (uno activo por deporte y tipo) y POST /reentrenar
+- [x] /api/pronosticos y /api/proyecciones (?jornada=, ?deporte=) con POST /generar y GET /precision
+- [x] /api/modelos con POST /:id/activar (uno activo por deporte y tipo) y POST /reentrenar
 
-### ⏳ [SL-30](https://github.com/statline-iteso/statline-backend/issues/20) · Endpoints de alertas e ingestas
+### ✅ [SL-30](https://github.com/statline-iteso/statline-backend/issues/20) · Endpoints de alertas e ingestas
 
 **Sprint:** S4 · **Points:** 3 · **Priority:** Media · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] /api/alertas con CRUD estándar por usuario
-- [ ] /api/ingestas solo GET y DELETE, y POST /ejecutar restringido a ADMIN
+- [x] /api/alertas con CRUD estándar por usuario
+- [x] /api/ingestas solo GET y DELETE, y POST /ejecutar restringido a ADMIN
 
-### ⏳ [SL-31](https://github.com/statline-iteso/statline-backend/issues/21) · Caché y limitación de tasa con Redis
+### ✅ [SL-31](https://github.com/statline-iteso/statline-backend/issues/21) · Caché y limitación de tasa con Redis
 
 **Sprint:** S5 · **Points:** 3 · **Priority:** Media · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] Caché de lecturas frecuentes (posiciones, calendario) con invalidación tras la ingesta
-- [ ] Rate limit por IP y por usuario; /readyz incluye Redis
+- [ ] Caché de lecturas frecuentes (posiciones, calendario) con invalidación tras la ingesta — *cambió: se invalida con cada escritura por la API (contador de versión global); lo que escribe la ingesta aparece al vencer el TTL de 60 s (backend D-16)*
+- [ ] Rate limit por IP y por usuario; /readyz incluye Redis — *cambió: límite por IP (global y login); no hay límite por usuario. `/readyz` sí incluye Redis*
 
 ## E5 · Servicio de predicciones
 
@@ -357,58 +360,58 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 - [x] /healthz, /readyz (PostgreSQL) y /metrics
 - [x] Contrato de entrada validado con Pydantic; rutas pendientes responden 501
 
-### ⏳ [SL-33](https://github.com/statline-iteso/statline-backend/issues/23) · Extracción de características desde PostgreSQL
+### ✅ [SL-33](https://github.com/statline-iteso/statline-backend/issues/23) · Extracción de características desde PostgreSQL
 
 **Sprint:** S4 · **Points:** 5 · **Priority:** Alta · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] Forma reciente, promedios móviles y localía por equipo
-- [ ] Promedios móviles por jugador desde `metricas` JSONB
+- [x] Forma reciente, promedios móviles y localía por equipo
+- [x] Promedios móviles por jugador desde `metricas` JSONB
 
-### ⏳ [SL-34](https://github.com/statline-iteso/statline-backend/issues/24) · Regresión logística para resultado de partido y marcador esperado
-
-**Sprint:** S4 · **Points:** 8 · **Priority:** Alta · **Repo:** `statline-backend`
-
-**Acceptance criteria**
-
-- [ ] Probabilidades local/empate/visita (empate solo en fútbol)
-- [ ] Marcador esperado; comparación contra baseline (siempre gana local)
-
-### ⏳ [SL-35](https://github.com/statline-iteso/statline-backend/issues/25) · Entrenar modelo de Gradient Boosting para proyección de métricas individuales
+### ✅ [SL-34](https://github.com/statline-iteso/statline-backend/issues/24) · Regresión logística para resultado de partido y marcador esperado
 
 **Sprint:** S4 · **Points:** 8 · **Priority:** Alta · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] Un modelo por métrica principal de cada deporte
-- [ ] MAE validado contra baseline (promedio de los últimos 5 partidos)
+- [x] Probabilidades local/empate/visita (empate solo en fútbol)
+- [ ] Marcador esperado; comparación contra baseline (siempre gana local) — *cambió: el baseline son las frecuencias de clase del entrenamiento, no «siempre gana local»*
 
-### ⏳ [SL-36](https://github.com/statline-iteso/statline-backend/issues/26) · Registro de modelos en ModeloPrediccion (versionado y activación)
+### ✅ [SL-35](https://github.com/statline-iteso/statline-backend/issues/25) · Entrenar modelo de Gradient Boosting para proyección de métricas individuales
+
+**Sprint:** S4 · **Points:** 8 · **Priority:** Alta · **Repo:** `statline-backend`
+
+**Acceptance criteria**
+
+- [x] Un modelo por métrica principal de cada deporte
+- [ ] MAE validado contra baseline (promedio de los últimos 5 partidos) — *cambió: el baseline es el promedio móvil de los últimos 10 partidos, no 5 (backend D-32)*
+
+### ✅ [SL-36](https://github.com/statline-iteso/statline-backend/issues/26) · Registro de modelos en ModeloPrediccion (versionado y activación)
 
 **Sprint:** S4 · **Points:** 5 · **Priority:** Alta · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] Artefactos joblib versionados; registro con métrica de error
-- [ ] Solo un modelo activo por deporte y tipo
+- [x] Artefactos joblib versionados; registro con métrica de error
+- [x] Solo un modelo activo por deporte y tipo
 
-### ⏳ [SL-37](https://github.com/statline-iteso/statline-backend/issues/27) · Endpoints /generar que escriben PronosticoPartido y ProyeccionJugador
+### ✅ [SL-37](https://github.com/statline-iteso/statline-backend/issues/27) · Endpoints /generar que escriben PronosticoPartido y ProyeccionJugador
 
 **Sprint:** S4 · **Points:** 4 · **Priority:** Media · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] POST /pronosticos/generar y /proyecciones/generar usan el modelo activo
+- [x] POST /pronosticos/generar y /proyecciones/generar usan el modelo activo
 
-### ⏳ [SL-38](https://github.com/statline-iteso/statline-backend/issues/28) · Endpoints de precisión y reentrenamiento
+### ✅ [SL-38](https://github.com/statline-iteso/statline-backend/issues/28) · Endpoints de precisión y reentrenamiento
 
 **Sprint:** S5 · **Points:** 3 · **Priority:** Media · **Repo:** `statline-backend`
 
 **Acceptance criteria**
 
-- [ ] GET /precision compara pronósticos con resultados finales
-- [ ] POST /modelos/reentrenar registra una versión nueva inactiva
+- [x] GET /precision compara pronósticos con resultados finales
+- [ ] POST /modelos/reentrenar registra una versión nueva inactiva — *cambió: la versión nueva se activa sola si supera al baseline y al modelo activo (backend D-31)*
 
 ### ✅ [SL-39](https://github.com/statline-iteso/statline-backend/issues/29) · Dockerfile multi-etapa de predicciones y cobertura con pytest
 
@@ -457,38 +460,38 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 - [x] Tabla de posiciones por liga
 - [x] Partidos por fecha con marcador y estatus
 
-### ⏳ [SL-44](https://github.com/statline-iteso/statline-frontend/issues/5) · Construir componentes visuales de boxscore con TailwindCSS y Recharts
+### ✅ [SL-44](https://github.com/statline-iteso/statline-frontend/issues/5) · Construir componentes visuales de boxscore con TailwindCSS y Recharts
 
 **Sprint:** S4 · **Points:** 5 · **Priority:** Media · **Repo:** `statline-frontend`
 
 **Acceptance criteria**
 
-- [ ] Tabla de boxscore por equipo con columnas según el deporte
-- [ ] Gráfica de barras de líderes del partido (Recharts)
+- [x] Tabla de boxscore por equipo con columnas según el deporte
+- [x] Gráfica de barras de líderes del partido (Recharts)
 
-### ⏳ [SL-45](https://github.com/statline-iteso/statline-frontend/issues/6) · Comparación de jugadores y equipos
+### ✅ [SL-45](https://github.com/statline-iteso/statline-frontend/issues/6) · Comparación de jugadores y equipos
 
 **Sprint:** S4 · **Points:** 4 · **Priority:** Media · **Repo:** `statline-frontend`
 
 **Acceptance criteria**
 
-- [ ] Selector de 2 a 4 jugadores y gráfica de radar con promedios
+- [x] Selector de 2 a 4 jugadores y gráfica de radar con promedios
 
-### ⏳ [SL-46](https://github.com/statline-iteso/statline-frontend/issues/7) · Vistas de pronósticos y proyecciones
-
-**Sprint:** S5 · **Points:** 4 · **Priority:** Media · **Repo:** `statline-frontend`
-
-**Acceptance criteria**
-
-- [ ] Probabilidades por partido de la jornada y proyecciones por jugador
-
-### ⏳ [SL-47](https://github.com/statline-iteso/statline-frontend/issues/8) · Listas de seguimiento y alertas
+### ✅ [SL-46](https://github.com/statline-iteso/statline-frontend/issues/7) · Vistas de pronósticos y proyecciones
 
 **Sprint:** S5 · **Points:** 4 · **Priority:** Media · **Repo:** `statline-frontend`
 
 **Acceptance criteria**
 
-- [ ] CRUD de listas y elementos; configuración de alertas por lesión, umbral o inicio
+- [x] Probabilidades por partido de la jornada y proyecciones por jugador
+
+### ✅ [SL-47](https://github.com/statline-iteso/statline-frontend/issues/8) · Listas de seguimiento y alertas
+
+**Sprint:** S5 · **Points:** 4 · **Priority:** Media · **Repo:** `statline-frontend`
+
+**Acceptance criteria**
+
+- [x] CRUD de listas y elementos; configuración de alertas por lesión, umbral o inicio
 
 ### ✅ [SL-48](https://github.com/statline-iteso/statline-frontend/issues/9) · Dockerfile con nginx y pruebas con Vitest (cobertura ≥ 70 %)
 
@@ -538,61 +541,61 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 - [x] Trivy sobre cada imagen; falla ante hallazgos HIGH o CRITICAL
 - [x] Las ramas `develop` y `main` exigen CI verde y una aprobación
 
-### ⏳ [SL-53](https://github.com/statline-iteso/statline-infra/issues/12) · cd.yml, repositorio GitOps (chart Helm) y aplicaciones de Argo CD
+### ✅ [SL-53](https://github.com/statline-iteso/statline-infra/issues/12) · cd.yml, repositorio GitOps (chart Helm) y aplicaciones de Argo CD
 
 **Sprint:** S5 · **Points:** 7 · **Priority:** Crítica · **Repo:** `statline-infra`
 
 **Acceptance criteria**
 
-- [ ] cd.yml publica statline/{web,api,predicciones,ingesta} en Docker Hub con SHA corto y SemVer
-- [ ] El workflow actualiza la etiqueta en `gitops/values-<ambiente>.yaml`
-- [ ] Chart Helm con Deployments, Services, Ingress, ConfigMaps y los 3 CronJob
-- [ ] Aplicaciones de Argo CD para statline-staging (develop) y statline-prod (main)
+- [x] cd.yml publica statline/{web,api,predicciones,ingesta} en Docker Hub con SHA corto y SemVer
+- [x] El workflow actualiza la etiqueta en `gitops/values-<ambiente>.yaml`
+- [x] Chart Helm con Deployments, Services, Ingress, ConfigMaps y los 3 CronJob
+- [x] Aplicaciones de Argo CD para statline-staging (develop) y statline-prod (main)
 
 ## E8 · Observabilidad y resiliencia
 
-### ⏳ [SL-54](https://github.com/statline-iteso/statline-infra/issues/13) · ServiceMonitors y dashboards de Grafana
+### ✅ [SL-54](https://github.com/statline-iteso/statline-infra/issues/13) · ServiceMonitors y dashboards de Grafana
 
 **Sprint:** S5 · **Points:** 5 · **Priority:** Media · **Repo:** `statline-infra`
 
 **Acceptance criteria**
 
-- [ ] ServiceMonitor por servicio sobre /metrics
-- [ ] Dashboard de latencia, errores e ingestas
+- [x] ServiceMonitor por servicio sobre /metrics
+- [x] Dashboard de latencia, errores e ingestas
 
-### ⏳ [SL-55](https://github.com/statline-iteso/statline-infra/issues/14) · HorizontalPodAutoscaler de api y predicciones
+### ✅ [SL-55](https://github.com/statline-iteso/statline-infra/issues/14) · HorizontalPodAutoscaler de api y predicciones
 
 **Sprint:** S5 · **Points:** 3 · **Priority:** Alta · **Repo:** `statline-infra`
 
 **Acceptance criteria**
 
-- [ ] api 2–6 réplicas al 70 % de CPU; predicciones 1–4 al 75 %
+- [x] api 2–6 réplicas al 70 % de CPU; predicciones 1–4 al 75 %
 
-### ⏳ [SL-56](https://github.com/statline-iteso/statline-infra/issues/15) · PodDisruptionBudget y NetworkPolicies
-
-**Sprint:** S5 · **Points:** 4 · **Priority:** Alta · **Repo:** `statline-infra`
-
-**Acceptance criteria**
-
-- [ ] default-deny por namespace y permisos explícitos
-- [ ] PDB minAvailable 1 para web y api
-
-### ⏳ [SL-57](https://github.com/statline-iteso/statline-infra/issues/16) · Pruebas de humo post-despliegue y rollback de Argo CD
+### ✅ [SL-56](https://github.com/statline-iteso/statline-infra/issues/15) · PodDisruptionBudget y NetworkPolicies
 
 **Sprint:** S5 · **Points:** 4 · **Priority:** Alta · **Repo:** `statline-infra`
 
 **Acceptance criteria**
 
-- [ ] Job de humo contra /healthz y /readyz
-- [ ] Rollback automático a la última revisión estable
+- [x] default-deny por namespace y permisos explícitos
+- [x] PDB minAvailable 1 para web y api
 
-### ⏳ [SL-58](https://github.com/statline-iteso/statline-infra/issues/17) · SecretProviderClass para montar secretos de Key Vault
+### ✅ [SL-57](https://github.com/statline-iteso/statline-infra/issues/16) · Pruebas de humo post-despliegue y rollback de Argo CD
+
+**Sprint:** S5 · **Points:** 4 · **Priority:** Alta · **Repo:** `statline-infra`
+
+**Acceptance criteria**
+
+- [x] Job de humo contra /healthz y /readyz
+- [ ] Rollback automático a la última revisión estable — *cambió: Argo CD no revierte solo; el rollback es revertir el squash del PR del bump (D-34)*
+
+### ✅ [SL-58](https://github.com/statline-iteso/statline-infra/issues/17) · SecretProviderClass para montar secretos de Key Vault
 
 **Sprint:** S5 · **Points:** 2 · **Priority:** Media · **Repo:** `statline-infra`
 
 **Acceptance criteria**
 
-- [ ] SecretProviderClass por ambiente y montaje en api, predicciones e ingesta
+- [x] SecretProviderClass por ambiente y montaje en api, predicciones e ingesta
 
 ## E9 · Documentación y entrega
 
@@ -605,14 +608,14 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 - [x] docs/ARCHITECTURE.md, docs/modelo-datos.md y docs/api.md
 - [x] Diagrama de la solución (Mermaid) y estrategia de ramas
 
-### ⏳ [SL-60](https://github.com/statline-iteso/statline-infra/issues/19) · Evidencia de despliegue y runbook de operación
+### ✅ [SL-60](https://github.com/statline-iteso/statline-infra/issues/19) · Evidencia de despliegue y runbook de operación
 
 **Sprint:** S6 · **Points:** 4 · **Priority:** Media · **Repo:** `statline-infra`
 
 **Acceptance criteria**
 
-- [ ] Capturas de AKS, Argo CD, Grafana y pruebas de humo
-- [ ] Runbook de alta y baja del ambiente
+- [x] Capturas de EKS, Argo CD, Grafana y pruebas de humo ([evidencia/](evidencia/README.md), sesión del 2026-11-23 en AWS Learner Lab: clúster, Argo CD, Grafana, pruebas de humo, ingesta real por deporte, simulacro de rollback y `make destroy`; falta solo el resumen de `make apply`, que se agrega en la siguiente reconstrucción)
+- [x] Runbook de alta y baja del ambiente ([RUNBOOK.md](RUNBOOK.md), secciones 1–3, 6 y 8)
 
 ### ⏳ [SL-61](https://github.com/statline-iteso/statline-infra/issues/20) · Entrega final y defensa del proyecto
 

@@ -1,0 +1,195 @@
+name: CD
+
+# Proposal §4.3, step 2 (GitOps part): an app repo pushes its images to Docker Hub and sends
+# repository_dispatch `bump-image`. This workflow writes the new tags into the values file of
+# that environment and opens (or updates) one rolling PR per environment from
+# `gitops/bump-<env>`: staging → develop, prod → main. Argo CD syncs once the PR merges.
+# Manual runs use workflow_dispatch.
+#
+# Branch protection stays intact (D-36). The branch is pushed and the PR opened with the
+# GITOPS_PR_TOKEN secret, a fine-grained PAT with contents + pull-requests write on this repo,
+# because pushes and PRs made with GITHUB_TOKEN start no workflows: CI would never run on the
+# PR and auto-merge.yml would never see it. auto-merge.yml merges staging bump PRs once CI
+# passes; prod bump PRs into main wait for a manual review like any release.
+
+on:
+  repository_dispatch:
+    types: [bump-image]
+  workflow_dispatch:
+    inputs:
+      env:
+        description: Environment to bump
+        type: choice
+        required: true
+        options: [staging, prod]
+      image:
+        description: Image to bump
+        type: choice
+        required: true
+        options: [web, api, predicciones, ingesta]
+      tag:
+        description: 7 lowercase hex chars (short SHA) or vX.Y.Z
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    name: bump image tags · ${{ github.event_name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      EVENT_NAME: ${{ github.event_name }}
+      PAYLOAD_ENV: ${{ github.event.client_payload.env }}
+      PAYLOAD_SOURCE: ${{ github.event.client_payload.source_repo }}
+      PAYLOAD_SHA: ${{ github.event.client_payload.sha }}
+      INPUT_ENV: ${{ inputs.env }}
+      INPUT_IMAGE: ${{ inputs.image }}
+      INPUT_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Validate the request and resolve the target branch
+        id: target
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
+            env_name=$PAYLOAD_ENV
+            source_repo=$PAYLOAD_SOURCE
+            sha=$PAYLOAD_SHA
+            case "$source_repo" in
+              statline-iteso/statline-backend | statline-iteso/statline-frontend) ;;
+              *) echo "::error::Dispatch from unexpected repository '$source_repo'"; exit 1 ;;
+            esac
+            if [[ -n "$sha" && ! "$sha" =~ ^[0-9a-f]{7,40}$ ]]; then
+              echo "::error::Invalid sha in payload"; exit 1
+            fi
+            jq -r '.client_payload.images | to_entries[] | "\(.key) \(.value)"' \
+              "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pairs.txt"
+          else
+            env_name=$INPUT_ENV
+            source_repo="manual run"
+            sha=""
+            printf '%s %s\n' "$INPUT_IMAGE" "$INPUT_TAG" > "$RUNNER_TEMP/pairs.txt"
+          fi
+          case "$env_name" in
+            staging) branch=develop ;;
+            prod) branch=main ;;
+            *) echo "::error::Invalid environment '$env_name' (staging|prod)"; exit 1 ;;
+          esac
+          {
+            echo "env=$env_name"
+            echo "branch=$branch"
+            echo "source=$source_repo"
+            echo "sha=$sha"
+          } >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/pairs.txt"
+
+      - name: Require the PR token
+        env:
+          GITOPS_PR_TOKEN: ${{ secrets.GITOPS_PR_TOKEN }}
+        run: |
+          if [[ -z "$GITOPS_PR_TOKEN" ]]; then
+            echo "::error::GITOPS_PR_TOKEN is not set; the tag bump PR cannot be opened (docs/pendientes.md)."
+            exit 1
+          fi
+
+      - name: Checkout the environment branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.branch }}
+          fetch-depth: 0
+          token: ${{ secrets.GITOPS_PR_TOKEN }}
+
+      - name: Helm (pinned, same as mise.toml)
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      # One rolling branch per environment: a new bump is added on top of the pending ones, so
+      # two dispatches never race for the same values file in two PRs. The branch is rebased on
+      # the target before each push and pushed with a lease, so a run that loses a race retries.
+      - name: Bump tags on gitops/bump-<env>, lint and push (retries when a branch moved)
+        id: bump
+        env:
+          ENV_NAME: ${{ steps.target.outputs.env }}
+          BASE: ${{ steps.target.outputs.branch }}
+          SOURCE: ${{ steps.target.outputs.source }}
+          SOURCE_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          values="gitops/charts/statline/values-${ENV_NAME}.yaml"
+          bump="gitops/bump-${ENV_NAME}"
+          echo "branch=$bump" >> "$GITHUB_OUTPUT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            git fetch --quiet origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
+            lease=""
+            if git fetch --quiet origin "+refs/heads/$bump:refs/remotes/origin/$bump" 2>/dev/null; then
+              lease=$(git rev-parse "origin/$bump")
+              git checkout --quiet -B "$bump" "origin/$bump"
+              if ! git rebase --quiet "origin/$BASE"; then
+                git rebase --abort
+                echo "::error::$bump does not rebase cleanly on $BASE. Merge or close its PR, delete the branch, and re-run."
+                exit 1
+              fi
+            else
+              git checkout --quiet -B "$bump" "origin/$BASE"
+            fi
+            subject=$(scripts/bump-image-tags.sh "$ENV_NAME" "$values" "$RUNNER_TEMP/pairs.txt")
+            if ! git diff --quiet -- "$values"; then
+              helm lint --strict gitops/charts/statline -f "$values"
+              git add "$values"
+              git commit --quiet -m "$subject" -m "Source: ${SOURCE} ${SOURCE_SHA}"
+            fi
+            if [[ "$(git rev-list --count "origin/$BASE..HEAD")" -eq 0 ]]; then
+              echo "Tags already set on $BASE; nothing to open."
+              echo "pending=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if [[ -n "$lease" && "$(git rev-parse HEAD)" == "$lease" ]]; then
+              echo "$bump already carries these tags."
+              echo "pending=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if git push --quiet --force-with-lease="refs/heads/$bump:${lease}" origin "HEAD:refs/heads/$bump"; then
+              echo "Pushed $bump: $subject"
+              echo "pending=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Push rejected ($bump or $BASE moved); retrying (attempt $attempt)" >&2
+            sleep $((attempt * 5))
+          done
+          echo "::error::Could not push $bump after 5 attempts"
+          exit 1
+
+      - name: Open or update the bump PR
+        if: steps.bump.outputs.pending == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_PR_TOKEN }}
+          ENV_NAME: ${{ steps.target.outputs.env }}
+          BASE: ${{ steps.target.outputs.branch }}
+          BUMP: ${{ steps.bump.outputs.branch }}
+        run: |
+          set -euo pipefail
+          {
+            echo "Image tag bumps for **${ENV_NAME}**, written by \`cd.yml\`. Argo CD syncs them once this merges."
+            echo
+            git log --reverse --format='- %s' "origin/$BASE..HEAD"
+            echo
+            if [[ "$BASE" == "develop" ]]; then
+              echo "auto-merge.yml merges this PR when CI passes. Rollback: revert its squash commit (D-34)."
+            else
+              echo "Production: review and merge by hand. Rollback: revert its squash commit (D-34)."
+            fi
+          } > "$RUNNER_TEMP/body.md"
+          number=$(gh pr list --head "$BUMP" --base "$BASE" --state open --json number --jq '.[0].number // empty')
+          if [[ -n "$number" ]]; then
+            gh pr edit "$number" --body-file "$RUNNER_TEMP/body.md" >/dev/null
+            echo "Updated PR #$number"
+          else
+            gh pr create --base "$BASE" --head "$BUMP" \
+              --title "ci(gitops): bump image tags (${ENV_NAME})" --body-file "$RUNNER_TEMP/body.md"
+          fi

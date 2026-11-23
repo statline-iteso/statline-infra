@@ -1,0 +1,45 @@
+# Argo CD, minimal for a course cluster: one replica of each component, no HA Redis, no Dex (no
+# SSO), no notifications. The server runs without TLS (server.insecure) because there is no
+# Ingress for it yet: reach it with `kubectl -n plataforma port-forward svc/argo-cd-argocd-server 8080:80`.
+# The chart's own Redis is Argo CD's cache, not the StatLine Redis (DECISIONS D-20).
+configs:
+  params:
+    server.insecure: true
+redis-ha:
+  enabled: false
+dex:
+  enabled: false
+notifications:
+  enabled: false
+server:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+controller:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+repoServer:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+applicationSet:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 128Mi

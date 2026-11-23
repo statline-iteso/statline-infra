@@ -1,0 +1,24 @@
+# 2026-11-23 ~02:55Z  ingesta with fallback, image pardosito/ingesta:6a763e8 (backend #59: an API-Sports plan error switches to the fallback)
+# One-off Jobs cloned from the CronJobs, --desde 2026-11-22 --hasta 2026-11-22, FALLBACK_HABILITADO=true. Log lines copied from kubectl logs.
+
+== backfill-basquetbol-1795402485  (BALLDONTLIE_API_KEY from SSM)
+ingesta.adaptadores.respaldo.RespuestaRespaldoError: /games: HTTP 401
+INFO ingesta resultado ResultadoEjecucion(ejecucion_id='b70cc536-ccf7-41e1-93d5-32c98ce44f17', exitosa=False, partidos=0, estadisticas=0, descartadas=0, error='RespuestaRespaldoError: /games: HTTP 401')
+
+== backfill-americano-1795402489  (THESPORTSDB_API_KEY=3, the default then)
+ingesta.adaptadores.respaldo.RespuestaRespaldoError: /eventsday.php: HTTP 403
+INFO ingesta resultado ResultadoEjecucion(ejecucion_id='a0d8a8a5-bf42-4f31-8217-57380a4dd22a', exitosa=False, partidos=0, estadisticas=0, descartadas=0, error='RespuestaRespaldoError: /eventsday.php: HTTP 403')
+
+== backfill-futbol-1795402492  (THESPORTSDB_API_KEY=3)
+ingesta.adaptadores.respaldo.RespuestaRespaldoError: /eventsday.php: HTTP 403
+INFO ingesta resultado ResultadoEjecucion(ejecucion_id='2ec9bd9a-2445-44bd-9dfb-4735e2368fbc', exitosa=False, partidos=0, estadisticas=0, descartadas=0, error='RespuestaRespaldoError: /eventsday.php: HTTP 403')
+
+# TheSportsDB: "The old '3' Free Sports API key is permanently disabled, Please use the new test key "123"" -> backend #61, infra #70.
+
+== backfill-americano-1795402541  (THESPORTSDB_API_KEY=123)
+WARNING ingesta.adaptadores.con_respaldo proveedor api-sports no disponible (/games: Free plans do not have access to this season, try from 2022 to 2024.); se usa thesportsdb para el resto de la corrida
+INFO ingesta resultado ResultadoEjecucion(ejecucion_id='df01a00d-a0cd-414c-a546-e36f8f9a6674', exitosa=True, partidos=3, estadisticas=0, descartadas=0, error=None)
+
+== backfill-futbol-1795402544  (THESPORTSDB_API_KEY=123)
+WARNING ingesta.adaptadores.con_respaldo proveedor api-sports no disponible (/fixtures: Free plans do not have access to this season, try from 2022 to 2024.); se usa thesportsdb para el resto de la corrida
+INFO ingesta resultado ResultadoEjecucion(ejecucion_id='4d6136db-a6b2-4644-bbbf-0285786d8bce', exitosa=True, partidos=3, estadisticas=0, descartadas=0, error=None)

@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: redis
+  namespace: plataforma
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: statline
+  source:
+    repoURL: https://github.com/statline-iteso/statline-infra.git
+    targetRevision: develop
+    path: gitops/charts/redis
+    helm:
+      releaseName: redis
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: plataforma
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m

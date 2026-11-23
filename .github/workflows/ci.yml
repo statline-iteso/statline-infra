@@ -1,14 +1,16 @@
 name: CI
 
 # Proposal §4.3, step 1 (Terraform part): fmt, validate and tflint on every push and PR, and a
-# `terraform plan` whose summary is posted as a PR comment. The plan job only runs once the
-# Azure credentials exist (repository secrets AZURE_CLIENT_ID, AZURE_TENANT_ID,
-# AZURE_SUBSCRIPTION_ID for OIDC, and TFSTATE_* for the backend); see docs/pendientes.md.
+# `terraform plan` of principal posted as a PR comment. The plan uses the Learner Lab keys that
+# `make creds` stores as the AWS_* secrets (D-38). They expire with the lab session, so the plan job
+# skips with a notice when they are stale, and it never fails the PR (informational only).
 
 on:
   push:
     branches: [main, develop]
   pull_request:
+  # auto-merge.yml starts this run on develop after each merge (GITHUB_TOKEN merges fire no push).
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -28,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.9.8
+          terraform_version: 1.10.5
       - name: terraform fmt
         run: terraform fmt -recursive -check terraform
       - name: terraform validate
@@ -62,49 +64,58 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # OIDC login to Azure
       pull-requests: write # plan comment
     env:
-      ARM_USE_OIDC: "true"
-      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_REGION: us-east-1
     steps:
-      - name: Azure credentials configured?
+      - uses: actions/checkout@v4
+      - name: Lab credentials still valid?
         id: creds
         run: |
-          if [[ -n "$ARM_CLIENT_ID" && -n "$ARM_SUBSCRIPTION_ID" ]]; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
+          if [[ -z "$AWS_ACCESS_KEY_ID" ]]; then
+            echo "::notice::No AWS_* secrets (run make creds); skipping terraform plan."
+          elif ! scripts/check-creds.sh; then
+            echo "::notice::Lab credentials expired (run make creds in a new lab session); skipping terraform plan."
+          elif ! aws s3api head-bucket --bucket "statline-tfstate-$(aws sts get-caller-identity --query Account --output text)" 2>/dev/null; then
+            echo "::notice::No state bucket in this lab account yet (run make bootstrap); skipping terraform plan."
           else
-            echo "::notice::Azure secrets not set yet; skipping terraform plan."
+            echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
-        if: steps.creds.outputs.ok == 'true'
       - uses: hashicorp/setup-terraform@v3
         if: steps.creds.outputs.ok == 'true'
         with:
-          terraform_version: 1.9.8
+          terraform_version: 1.10.5
+      # init and plan are informational: a failure is reported in the PR comment, not as a red check.
       - name: terraform init
         if: steps.creds.outputs.ok == 'true'
+        id: init
+        continue-on-error: true
         working-directory: terraform/principal
         run: |
+          acct=$(aws sts get-caller-identity --query Account --output text)
           terraform init -input=false \
-            -backend-config="resource_group_name=${{ secrets.TFSTATE_RESOURCE_GROUP }}" \
-            -backend-config="storage_account_name=${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" \
-            -backend-config="container_name=tfstate"
+            -backend-config="bucket=statline-tfstate-${acct}" \
+            -backend-config="key=principal.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="use_lockfile=true" \
+            -backend-config="encrypt=true"
       - name: terraform plan
-        if: steps.creds.outputs.ok == 'true'
+        if: steps.creds.outputs.ok == 'true' && steps.init.outcome == 'success'
         id: plan
+        continue-on-error: true
         working-directory: terraform/principal
         run: |
-          terraform plan -input=false -no-color -lock-timeout=5m -out=tfplan | tee plan.txt
+          set -o pipefail
+          terraform plan -input=false -no-color -lock-timeout=5m -out=tfplan 2>&1 | tee plan.txt
           echo "summary=$(grep -E '^(Plan:|No changes)' plan.txt | tail -1)" >> "$GITHUB_OUTPUT"
       - name: Comment the plan on the PR
-        if: steps.creds.outputs.ok == 'true'
+        if: always() && steps.creds.outputs.ok == 'true' && hashFiles('terraform/principal/plan.txt') != ''
         uses: actions/github-script@v7
         env:
-          SUMMARY: ${{ steps.plan.outputs.summary }}
+          SUMMARY: "${{ steps.plan.outputs.summary || 'plan failed, see the log below' }}"
         with:
           script: |
             const fs = require("fs");
@@ -123,3 +134,28 @@ jobs:
               issue_number: context.issue.number,
               body,
             });
+
+  helm:
+    name: helm · lint, kubeconform
+    runs-on: ubuntu-latest
+    env:
+      KUBECONFORM_VERSION: v0.8.0
+      KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+      - name: kubeconform (pinned release, checksum verified)
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/kubeconform.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" kubeconform
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: make helm-lint
+        run: make helm-lint
+      - name: make helm-validate
+        run: make helm-validate

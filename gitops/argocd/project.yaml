@@ -1,0 +1,25 @@
+# AppProject for everything StatLine. Applied once by hand at bootstrap (see gitops/README.md),
+# because the root Application below runs inside this project.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: statline
+  namespace: plataforma
+spec:
+  description: StatLine workloads, Redis, cluster-wide cert-manager issuers and the SSM secret store
+  sourceRepos:
+    - https://github.com/statline-iteso/statline-infra.git
+  destinations:
+    # plataforma also holds Argo CD itself: the root app writes the Application objects there.
+    - server: https://kubernetes.default.svc
+      namespace: plataforma
+    - server: https://kubernetes.default.svc
+      namespace: statline-staging
+    - server: https://kubernetes.default.svc
+      namespace: statline-prod
+  # Cluster-scoped objects allowed: the Let's Encrypt ClusterIssuers and the SSM ClusterSecretStore.
+  clusterResourceWhitelist:
+    - group: cert-manager.io
+      kind: ClusterIssuer
+    - group: external-secrets.io
+      kind: ClusterSecretStore

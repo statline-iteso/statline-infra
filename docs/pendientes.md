@@ -1,64 +1,37 @@
 # Pendientes para la entrega final
 
-Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** Rodríguez (infraestructura, predicciones, despliegue). Lo implementado está en verde en el [diagrama](solucion.png); esta lista es lo que falta. Cada punto tiene su issue en el [tablero](https://github.com/orgs/statline-iteso/projects) y en [BACKLOG.md](BACKLOG.md).
+Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** Rodríguez (infraestructura, predicciones, despliegue). Todo lo del [diagrama](solucion.png) está implementado; esta lista es lo que falta para la entrega. Cada punto tiene su issue en el [tablero](https://github.com/orgs/statline-iteso/projects) y en [BACKLOG.md](BACKLOG.md).
 
-**Avance:** 32 de 61 issues · 144 de 277 puntos (52 %).
+**Avance:** 60 de 61 issues · 273 de 277 puntos (99 %). El código está completo y fusionado en `develop` de los tres repos. Como se negaron los créditos de Azure, la infraestructura se movió a AWS Learner Lab (EKS, RDS, SSM; DECISIONS D-38, issue #50, cerrado). Staging se desplegó y se verificó el 2026-11-22 y el 2026-11-23: CD automático de punta a punta, pruebas de humo, ingesta real por deporte, simulacro de rollback y `make destroy`. La evidencia está en [evidencia/](evidencia/README.md) (SL-60, cerrado). Costo del laboratorio hasta el 2026-11-23: USD 3.1 de 50.
 
-## Infraestructura (statline-infra)
-
-| # | Pendiente | Issue | Pts |
-|---|---|---|---|
-| 1 | Módulo `seguridad`: Key Vault con RBAC, secretos (`database-url`, `jwt-secret`, `jwt-refresh-secret`, `api-sports-key`) y rol *Key Vault Secrets User* para la identidad del CSI add-on (ya expuesta como output `key_vault_csi_identity_object_id`) | SL-09 | 5 |
-| 2 | Módulo `observabilidad`: Log Analytics + diagnostic settings; conectar `oms_agent` en el módulo `aks` (hay un TODO) | SL-10 | 3 |
-| 3 | Módulos `dns` y `plataforma`: zona DNS, IP pública del ingress y los cinco `helm_release` (ingress-nginx, cert-manager, argo-cd, kube-prometheus-stack, redis). Agregar los proveedores `kubernetes` y `helm` en `principal/versions.tf` | SL-12 | 6 |
-| 4 | `gitops/`: chart Helm (Deployments web/api/predicciones, Services, Ingress, ConfigMaps, los 3 CronJob con sus horarios), `values-staging.yaml`, `values-prod.yaml`, Applications de Argo CD; `cd.yml` en los repos de app (push a Docker Hub + actualizar la etiqueta aquí). El contrato de imágenes está en [ARCHITECTURE §5](ARCHITECTURE.md#5-contract-with-the-backend-images) | SL-53 | 7 |
-| 5 | ServiceMonitors y dashboards de Grafana | SL-54 | 5 |
-| 6 | HPA de api (2–6, 70 % CPU) y predicciones (1–4, 75 % CPU) | SL-55 | 3 |
-| 7 | NetworkPolicies default-deny y PDBs | SL-56 | 4 |
-| 8 | Job de pruebas de humo (PostSync) y rollback de Argo CD | SL-57 | 4 |
-| 9 | SecretProviderClass por ambiente | SL-58 | 2 |
-| 10 | Evidencia de despliegue y runbook | SL-60 | 4 |
-| 11 | Entrega final: release `v1.0.0` y defensa | SL-61 | 4 |
-
-## Backend (statline-backend)
+## Lo que falta
 
 | # | Pendiente | Issue | Pts |
 |---|---|---|---|
-| 12 | Adaptador de Liga MX (api-football, liga 262) siguiendo `AdaptadorBasquetbol` | SL-17 | 5 |
-| 13 | Adaptador de NFL (api-american-football, liga 1) | SL-18 | 5 |
-| 14 | Proveedores de respaldo balldontlie.io y TheSportsDB | SL-20 | 6 |
-| 15 | `/api/jugadores/:id/promedios`, `/tendencia` y `/comparar?ids=` (hay un TODO en `routes/catalogo.ts`) | SL-27 | 5 |
-| 16 | `/api/estadisticas` y `/api/listas` | SL-28 | 5 |
-| 17 | `/api/pronosticos`, `/api/proyecciones`, `/api/modelos` (proxy a predicciones) | SL-29 | 4 |
-| 18 | `/api/alertas` e `/api/ingestas` | SL-30 | 3 |
-| 19 | Caché y rate limit con Redis; `/readyz` revisa Redis | SL-31 | 3 |
-| 20 | Predicciones: extracción de características | SL-33 | 5 |
-| 21 | Predicciones: regresión logística (resultado y marcador esperado) | SL-34 | 8 |
-| 22 | Predicciones: Gradient Boosting (proyecciones por jugador) | SL-35 | 8 |
-| 23 | Predicciones: registro y activación en `ModeloPrediccion` | SL-36 | 5 |
-| 24 | Predicciones: `/generar` escribe pronósticos y proyecciones (hoy responden 501) | SL-37 | 4 |
-| 25 | Predicciones: `/precision` y `/reentrenar` | SL-38 | 3 |
+| 1 | Release `v1.0.0`: PRs `develop → main` en los tres repos (los revisa Juan Pablo), etiqueta y notas; despliegue de prod; presentación y demo de punta a punta | SL-61 | 4 |
+| 2 | Resumen de `make apply` para la evidencia de SL-60: se captura en la siguiente reconstrucción del ambiente | SL-60 | — |
 
-## Frontend (statline-frontend)
+## Decisiones que faltan al desplegar prod
 
-| # | Pendiente | Issue | Pts |
-|---|---|---|---|
-| 26 | Boxscore con Tailwind y Recharts (ruta `partidos/:id`) | SL-44 | 5 |
-| 27 | Comparación de jugadores y equipos | SL-45 | 4 |
-| 28 | Vistas de pronósticos y proyecciones | SL-46 | 4 |
-| 29 | Listas de seguimiento y alertas | SL-47 | 4 |
+- Respaldo en prod: decidido, activo como en staging (D-41).
+- Datos de demo en prod: decidido, `seed-demo` también en prod para que sus modelos entrenen (D-42; RUNBOOK §3 con `ENV=prod`).
+- `networkPolicies.kubeApiCidr` solo si se usa `api.ingestaLanzador: kubernetes`.
 
-## Configuración que falta en GitHub y Azure
+## Configuración en GitHub y AWS (lista)
 
-- **Secrets de CI (infra):** `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (app registration con credencial federada para GitHub OIDC) y `TFSTATE_RESOURCE_GROUP`, `TFSTATE_STORAGE_ACCOUNT` (salen de `make bootstrap`). Sin ellos el job `plan` se salta.
-- **Secrets de CD (app repos):** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` y un token para disparar `repository_dispatch` en infra.
-- **AKS 1.30:** confirmar con `az aks get-versions -l eastus2` que se puede crear; si no, usar la versión soportada más antigua y registrarlo en DECISIONS.
+- **Secrets de CI (infra):** `make creds` guarda las llaves del lab como `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` y `AWS_SESSION_TOKEN`. Expiran con cada sesión; cuando expiran, el job `plan` se salta con un aviso.
+- **Secrets de CD (backend y frontend):** `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `INFRA_DISPATCH_TOKEN` y la variable `DOCKERHUB_NAMESPACE=pardosito`. Las imágenes van a `pardosito/{web,api,predicciones,ingesta}`.
+- **Token del bump en infra:** `GITOPS_PR_TOKEN`, un PAT fino aprobado por la organización (`contents` y `pull-requests` de escritura sobre `statline-infra`). Verificado: cada merge en una app abre y fusiona su bump PR de staging sin intervención (D-36).
+- **Llaves de proveedores en SSM:** `/statline/comun/api-sports-key` y `/statline/comun/balldontlie-api-key` con valores reales. TheSportsDB usa su llave pública `123` (la `3` se retiró).
+- **EKS 1.35:** en soporte estándar al 2026-11-21 (D-38). Si sale del soporte estándar, cambiar `kubernetes_version` y registrarlo en DECISIONS.
 
 ## Riesgos y plan B
 
 | Riesgo | Impacto | Plan B |
 |---|---|---|
-| Dependencia de la API externa | Alto | La ingesta ya está desacoplada (lecturas 100 % desde la base) y respeta la cuota; faltan los respaldos (SL-20) |
-| Agotamiento de créditos de Azure | Crítico | Nodos Standard_B2s, `make destroy` al terminar cada sesión, presupuesto con alerta en el portal |
-| Precisión pobre de los modelos | Medio | Comparar siempre contra un baseline y versionar en `ModeloPrediccion`; activar solo si mejora |
-| Alcance excesivo | Alto | Orden estricto: 1º NBA (hecho), 2º NFL, 3º Liga MX; entrega viable con dos deportes |
+| Dependencia de la API externa | Alto | El plan gratuito de API-Sports solo cubre 2022–2024; un error de plan cambia la corrida al respaldo (backend D-38). Staging recibe partidos reales de balldontlie y TheSportsDB, sin estadísticas de jugadores (backend D-39). Los modelos se entrenan con `ingesta seed-demo`, también en prod (D-42) |
+| Lab: fin de sesión con el ambiente arriba | Alto | Al terminar la sesión el lab detiene y reemplaza los nodos; si no se reinicia pronto, no se vuelven a unir al clúster y todo sigue cobrando. `make destroy` antes de que acabe el tiempo; si ya pasó, `make creds` y reiniciar los nodos (RUNBOOK §8) |
+| `make destroy` atorado | Medio | `scripts/vaciar-gitops.sh` borra las Applications y los ExternalSecrets antes de los charts; si un uninstall se atora igual, RUNBOOK §8 explica cómo quitar los finalizers |
+| Agotamiento del presupuesto del lab (USD 50) | Crítico | 2 nodos t3.medium y RDS db.t3.micro (~USD 0.31/h), sin NAT gateway, `make destroy` al terminar cada sesión; revisar el gasto del lab en cada sesión |
+| Restricciones ocultas del lab | Alto | El lab no deja leer sus políticas: un `AccessDenied` aparece hasta el apply. Cada uno se documenta en D-38 con su solución |
+| Precisión pobre de los modelos | Medio | Siempre contra un baseline, versionado en `ModeloPrediccion`; solo se activa si mejora (backend D-31) |

@@ -1,0 +1,33 @@
+# Redis is a cache: losing it only costs cache misses, so the default is no persistence.
+
+image:
+  repository: redis
+  # Pinned tag, never latest (AGENTS.md section 7).
+  tag: "7.4-alpine"
+  pullPolicy: IfNotPresent
+
+# Keep the cache small: eviction starts at maxmemory.
+maxmemory: 128mb
+maxmemoryPolicy: allkeys-lru
+
+# Persistence is off (no RDB, no AOF). Enable only if the cache must survive restarts.
+persistence:
+  enabled: false
+  size: 1Gi
+  storageClassName: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 192Mi
+
+# NetworkPolicy (D-31, D-26): port 6379 is open only to the api pods of statline namespaces.
+# A namespace qualifies when it carries the label key below (Terraform labels statline-staging and
+# statline-prod; k3d-up.sh labels them locally). Peer = namespace label AND pod label, in one rule.
+networkPolicy:
+  enabled: true
+  namespaceLabelKey: statline.io/ambiente
+  clientPodLabels:
+    app.kubernetes.io/name: statline-api

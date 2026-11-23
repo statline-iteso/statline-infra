@@ -1,0 +1,29 @@
+{{- if .Values.networkPolicy.enabled }}
+# Redis accepts connections only from api pods in statline namespaces (D-26, D-31).
+# Redis is a cache with no outbound needs, so egress is denied entirely (policyTypes Egress, no rules).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis
+  labels:
+    {{- include "redis.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - key: {{ .Values.networkPolicy.namespaceLabelKey | quote }}
+                operator: Exists
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.clientPodLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 6379
+{{- end }}

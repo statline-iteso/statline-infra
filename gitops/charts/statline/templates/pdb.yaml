@@ -1,0 +1,31 @@
+{{- /*
+PodDisruptionBudgets (policy/v1) for web, api and predicciones. Each entry sets exactly one of
+minAvailable or maxUnavailable. A single-replica workload must not use minAvailable: 1, because
+that blocks voluntary evictions (node drains) forever (D-31).
+*/ -}}
+{{- $targets := list
+  (dict "component" "web" "cfg" .Values.web.pdb "tag" .Values.web.image.tag)
+  (dict "component" "api" "cfg" .Values.api.pdb "tag" .Values.api.image.tag)
+  (dict "component" "predicciones" "cfg" .Values.predicciones.pdb "tag" .Values.predicciones.image.tag)
+-}}
+{{- range $targets }}
+{{- if .cfg.enabled }}
+{{- $name := include "statline.fullname" (dict "component" .component "ctx" $) }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "statline.labels" (dict "component" .component "ctx" $ "version" .tag) | nindent 4 }}
+spec:
+  {{- if .cfg.maxUnavailable }}
+  maxUnavailable: {{ .cfg.maxUnavailable }}
+  {{- else }}
+  minAvailable: {{ required (printf "%s.pdb.minAvailable or maxUnavailable is required" .component) .cfg.minAvailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "statline.selectorLabels" (dict "component" .component) | nindent 6 }}
+{{- end }}
+{{- end }}

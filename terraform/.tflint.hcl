@@ -7,8 +7,9 @@ plugin "terraform" {
   preset  = "recommended"
 }
 
-plugin "azurerm" {
+# AWS Learner Lab (D-38).
+plugin "aws" {
   enabled = true
-  version = "0.27.0"
-  source  = "github.com/terraform-linters/tflint-ruleset-azurerm"
+  version = "0.49.0"
+  source  = "github.com/terraform-linters/tflint-ruleset-aws"
 }

@@ -1,0 +1,338 @@
+# Defaults for the statline chart. Environment files (values-staging.yaml, values-prod.yaml,
+# values-k3d.yaml) override only what differs. Image tags have no default: every environment
+# file sets them, and the chart fails with a clear message when one is missing.
+#
+# Image tags are quoted strings (a tag like 1234567 must not become a number). cd.yml is the
+# only writer of the *.image.tag paths in staging and prod values.
+
+# Shown as the statline.io/environment label.
+environment: dev
+
+nameOverride: ""
+
+global:
+  # Registry prefix for every image: <imageRegistry>/<image.repository>:<tag>.
+  # Set to "" to use repository:tag as written (k3d uses images imported with k3d image import).
+  imageRegistry: docker.io
+
+# Shared Redis (chart gitops/charts/redis, namespace plataforma).
+redis:
+  host: redis.plataforma.svc.cluster.local
+  port: 6379
+  # Logical DB index, so staging and prod never share keys: prod 0, staging 1.
+  dbIndex: 0
+
+# Secrets. Both modes produce ONE Kubernetes Secret named secrets.name whose keys are the env var names.
+secrets:
+  # external: External Secrets syncs SSM Parameter Store into the Secret (staging and prod, D-38).
+  # plain:    the chart renders the Secret from secrets.plain.data (k3d only; fake values).
+  mode: external
+  name: statline-secrets
+  external:
+    # ClusterSecretStore in gitops/plataforma/cluster-secret-store.yaml.
+    storeName: statline-ssm
+    refreshInterval: 1h
+    # Env var (= Secret key) -> SSM parameter (module seguridad: /statline/<env>/<name> and
+    # /statline/comun/<name>). Environment files set the real names; empty fails the render.
+    parameters:
+      DATABASE_URL: ""
+      JWT_SECRET: ""
+      JWT_REFRESH_SECRET: ""
+      API_SPORTS_KEY: ""
+      # Optional fallback provider. The parameter must exist (Terraform creates a placeholder), or the sync fails.
+      BALLDONTLIE_API_KEY: ""
+      # Password of the first ADMIN; only the api seed initContainer reads it (backend D-37).
+      SEED_ADMIN_PASSWORD: ""
+  plain:
+    # Only read when secrets.mode is plain. Never put real values here.
+    data: {}
+
+# Public entry point. Routes /api to the api Service and / to web.
+ingress:
+  enabled: true
+  className: nginx
+  # Required. Set in each environment file.
+  host: ""
+  tls:
+    # cert-manager issues the certificate for the host via the ClusterIssuer below.
+    enabled: false
+    secretName: statline-tls
+    clusterIssuer: ""
+
+# Static SPA served by nginx-unprivileged.
+web:
+  replicas: 2
+  # PodDisruptionBudget (D-31). minAvailable 1 is safe here because replicas is 2.
+  pdb:
+    enabled: true
+    minAvailable: 1
+  port: 8080
+  runAsUser: 101
+  image:
+    repository: pardosito/web
+    tag: ""
+    pullPolicy: IfNotPresent
+  serviceAccount:
+    # Workloads do not need the API server; flip only if a component starts to need it.
+    automount: false
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
+# Node API. Its initContainer runs prisma migrate deploy with the same image (D-12).
+api:
+  # Used only when autoscaling.enabled is false (the HPA owns the count otherwise).
+  replicas: 2
+  # HorizontalPodAutoscaler (autoscaling/v2, D-31). Needs metrics-server (k3s ships it; on EKS it is the metrics-server addon, module eks).
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    scaleDownStabilizationSeconds: 300
+  # PodDisruptionBudget: minAvailable 1 with replicas >= 2 (set pdb.enabled false in single-replica environments).
+  pdb:
+    enabled: true
+    minAvailable: 1
+  port: 3000
+  runAsUser: 1000
+  image:
+    repository: pardosito/api
+    tag: ""
+    pullPolicy: IfNotPresent
+  config:
+    logLevel: info
+    # Duration format expected by the API (confirm with the backend owner).
+    jwtAccessTtl: 15m
+    jwtRefreshTtl: 7d
+    # In-process response cache TTL (seconds) and rate limits (requests per minute, per client IP).
+    cacheTtlS: 60
+    rateLimitPerMin: 300
+    rateLimitLoginPerMin: 10
+  # How the api triggers ingestions on demand (INGESTA_LANZADOR): deshabilitado | kubernetes.
+  # kubernetes mounts the ServiceAccount token and renders a namespaced Role/RoleBinding
+  # (get cronjobs, create jobs in group batch).
+  ingestaLanzador: deshabilitado
+  # Keys of the statline Secret this component reads (env var names).
+  secretKeys:
+    - DATABASE_URL
+    - JWT_SECRET
+    - JWT_REFRESH_SECRET
+  serviceAccount:
+    # Kept as a switch: the API may need the token later (e.g. for workload identity).
+    automount: false
+  migrations:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 384Mi
+  # Second initContainer, after the migrations: `node dist/seed.js` upserts the three api-sports
+  # leagues the ingesta CronJobs look up, and the first ADMIN (backend D-37). Upserts only, so it is
+  # safe on every pod start and never changes existing rows. Uses the migrations resources.
+  seed:
+    enabled: true
+    adminEmail: admin@statline.local
+    # Only this container gets the admin password; the api container never sees it.
+    secretKeys:
+      - DATABASE_URL
+      - SEED_ADMIN_PASSWORD
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      memory: 384Mi
+
+# Forecast service (FastAPI + scikit-learn). Model artifacts are cached in /tmp.
+predicciones:
+  # Used only when autoscaling.enabled is false.
+  replicas: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 75
+    scaleDownStabilizationSeconds: 300
+  # PodDisruptionBudget: maxUnavailable 1, NOT minAvailable 1. The workload may run with a single
+  # replica, and minAvailable 1 there blocks node drains. See docs/DECISIONS.md D-31.
+  pdb:
+    enabled: true
+    maxUnavailable: 1
+  port: 8000
+  runAsUser: 10001
+  image:
+    repository: pardosito/predicciones
+    tag: ""
+    pullPolicy: IfNotPresent
+  config:
+    artefactosDir: /tmp/artefactos
+    logLevel: info
+  secretKeys:
+    - DATABASE_URL
+  serviceAccount:
+    automount: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      memory: 768Mi
+
+# Ingesta runs only as CronJobs (no Deployment, no port).
+ingesta:
+  runAsUser: 10001
+  image:
+    repository: pardosito/ingesta
+    tag: ""
+    pullPolicy: IfNotPresent
+  config:
+    # Seasons must match the seeded liga.temporada values (backend ARCHITECTURE section 8).
+    temporadaBasquetbol: "2025-2026"
+    temporadaAmericano: "2026"
+    temporadaFutbol: "2026"
+    # API-Sports free plan quota per day.
+    apiSportsDailyQuota: "100"
+    # TheSportsDB public test key ("3" was retired, HTTP 403).
+    thesportsdbApiKey: "123"
+    # Fallback providers can duplicate games: keep "false" until deduplication is verified.
+    fallbackHabilitado: "false"
+  secretKeys:
+    - DATABASE_URL
+    - API_SPORTS_KEY
+    - BALLDONTLIE_API_KEY
+  # Keys the pod tolerates missing (secretKeyRef optional).
+  optionalSecretKeys:
+    - BALLDONTLIE_API_KEY
+  serviceAccount:
+    automount: false
+  # One CronJob per entry. Schedules are UTC.
+  jobs:
+    - name: basquetbol
+      schedule: "0 8 * * *"
+      args: ["run", "basquetbol"]
+    - name: americano
+      schedule: "0 8 * * 2"
+      args: ["run", "americano"]
+    - name: futbol
+      schedule: "0 8 * * 1,5"
+      args: ["run", "futbol"]
+  cronjob:
+    concurrencyPolicy: Forbid
+    successfulJobsHistoryLimit: 3
+    failedJobsHistoryLimit: 3
+    backoffLimit: 1
+    activeDeadlineSeconds: 3600
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+# NetworkPolicies (D-31). Default-deny ingress and egress for the namespace, then one allow policy
+# per flow (matrix: docs/ARCHITECTURE.md section 5.1). The selectors are labels of the peers, so
+# they change with the cluster: check them against the ingress-nginx and Prometheus installs.
+networkPolicies:
+  enabled: false
+  # Namespace labels of kube-system (CoreDNS): DNS egress for every pod.
+  dnsNamespaceLabels:
+    kubernetes.io/metadata.name: kube-system
+  # Who may reach web (80 public traffic) and api (/api and /metrics paths share a port).
+  ingressController:
+    namespaceLabels:
+      kubernetes.io/metadata.name: plataforma
+    podLabels:
+      app.kubernetes.io/name: ingress-nginx
+  prometheus:
+    namespaceLabels:
+      kubernetes.io/metadata.name: plataforma
+    podLabels:
+      app.kubernetes.io/name: prometheus
+  # Pods labelled statline.io/smoke: "true" (Argo CD PostSync smoke tests, SL-57) may reach web and api.
+  smokeTest:
+    enabled: true
+  # Extra NetworkPolicy peers allowed to web and api (raw peer objects). Hook for other branches.
+  extraIngressFrom: []
+  # Redis in plataforma (chart gitops/charts/redis). Only api uses it.
+  redis:
+    namespaceLabels:
+      kubernetes.io/metadata.name: plataforma
+    podLabels:
+      app.kubernetes.io/name: redis
+  # The two private subnets of module red that hold RDS (10.0.64.0/24, 10.0.65.0/24; output
+  # postgres_private_cidrs). Empty when no external PostgreSQL.
+  postgresCidr: "10.0.64.0/23"
+  # Kubernetes API address(es). Required when api.ingestaLanzador is kubernetes. No default: on EKS
+  # in-VPC calls reach the control-plane ENIs, whose IPs come from the cluster (kubectl get endpoints kubernetes).
+  kubeApiCidr: ""
+  kubeApiPorts:
+    - 443
+    - 6443
+  # Optional ingress allow from a node CIDR, for kubelet probes. Empty (off) by default: kube-router
+  # and the EKS VPC CNI policy agent allow node-to-local-pod traffic. Not usable on EKS anyway: pods
+  # take IPs from the node subnet, so the CIDR would open every pod to every other pod.
+  allowNodeCidr: ""
+
+# Post-deploy smoke tests (templates/smoke-test.yaml). A Job that runs after every sync: an Argo CD
+# PostSync hook, and a Helm post-install/post-upgrade hook for `helm upgrade --install` (k3d).
+# If it fails, the sync is marked failed but nothing is rolled back: see docs/RUNBOOK.md.
+smokeTests:
+  enabled: true
+  image:
+    repository: curlimages/curl
+    # Pinned. curl runs as uid 100 in this image.
+    tag: "8.11.1"
+    pullPolicy: IfNotPresent
+  runAsUser: 100
+  runAsGroup: 101
+  # Each check retries `attempts` times, `intervalSeconds` apart. The Job is killed after activeDeadlineSeconds.
+  attempts: 10
+  intervalSeconds: 6
+  activeDeadlineSeconds: 180
+  ttlSecondsAfterFinished: 3600
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      memory: 32Mi
+
+# DEV ONLY (k3d). Ephemeral PostgreSQL in the release namespace. Off everywhere else.
+devPostgres:
+  enabled: false
+  image: postgres:16-alpine
+  user: statline
+  password: ""
+  database: statline
+
+# Observability (SL-54): ServiceMonitors for api and predicciones, a PrometheusRule and Grafana
+# dashboards. Needs the Prometheus Operator CRDs (kube-prometheus-stack in plataforma), so it is
+# off by default: k3d has no CRDs. Staging and prod turn it on. Ingesta is not scraped (its
+# CronJobs are short-lived); its health comes from kube-state-metrics job and CronJob metrics.
+monitoring:
+  enabled: false
+  # Extra labels on every ServiceMonitor. Empty: plataforma sets serviceMonitorSelectorNilUsesHelmValues
+  # to false, so Prometheus picks up ServiceMonitors in every namespace without a label.
+  serviceMonitorLabels: {}
+  # Labels on the PrometheusRule. kube-prometheus-stack selects rules by label (its
+  # ruleSelectorNilUsesHelmValues defaults to true), so this must match the Helm release name.
+  ruleLabels:
+    release: kube-prometheus-stack
+  # Scrape interval for the api and predicciones /metrics endpoints.
+  interval: 30s
+  alerts:
+    enabled: true
+    # Fires when 5xx responses stay above this share of api requests for 10 minutes.
+    api5xxRatio: 0.05
+    # Fires when the api p95 latency stays above this many seconds for 10 minutes.
+    apiP95Seconds: 1
+    # Fires when no ingesta-basquetbol CronJob has succeeded for this many hours.
+    ingestaStaleHours: 36
+  dashboards:
+    # ConfigMaps labelled grafana_dashboard=1 from dashboards/*.json (the Grafana sidecar loads them).
+    enabled: true

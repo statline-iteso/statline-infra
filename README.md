@@ -3,10 +3,10 @@
 Infrastructure for **StatLine**, a web platform for unified sports statistics and performance forecasts across three leagues: **NBA** (basketball), **NFL** (American football) and **Liga MX** (football). Scheduled jobs pull games and box scores from API-Sports, a REST API serves comparisons and standings, and a Python service produces match-outcome probabilities and player projections.
 
 This repo holds:
-- **Terraform** for every Azure resource: `bootstrap` (state storage) and `principal` (network, AKS, PostgreSQL, and *(planned)* Key Vault, Log Analytics, DNS and the platform Helm releases)
+- **Terraform** for every AWS resource (Learner Lab, D-38): `bootstrap` (S3 state bucket, ingress Elastic IP) and `principal` (VPC, EKS, RDS PostgreSQL, SSM parameters, CloudWatch logs, platform Helm releases)
 - the `make` targets that bootstrap state, plan and apply
 - a **k3d** setup for testing the Kubernetes manifests locally
-- *(planned)* the **GitOps** chart and Argo CD applications that deploy the four images
+- the **GitOps** charts (`gitops/charts/statline`, `gitops/charts/redis`) and the Argo CD applications that deploy the four images
 - the project-wide docs: architecture, data model, API design, backlog and pending work
 
 The app itself lives in [`statline-backend`](https://github.com/statline-iteso/statline-backend) and [`statline-frontend`](https://github.com/statline-iteso/statline-frontend).
@@ -26,13 +26,13 @@ Cada mañana el CronJob `ingesta-basquetbol` consulta API-Sports, normaliza los 
 
 ![Diagrama de la solución](docs/solucion.png)
 
-Verde: implementado. Gris punteado: pendiente para la segunda mitad. Fuente editable en [`docs/solucion.mmd`](docs/solucion.mmd) (`make diagram`).
+Verde: implementado (aún sin aplicar en AWS). Línea punteada: opcional o respaldo. Fuente editable en [`docs/solucion.mmd`](docs/solucion.mmd) (`make diagram`).
 
 ### Repositorios
 
 | Repo | Contiene |
 |---|---|
-| [statline-infra](https://github.com/statline-iteso/statline-infra) (este) | Terraform, k3d, *(pendiente)* chart GitOps y Argo CD, documentación del proyecto |
+| [statline-infra](https://github.com/statline-iteso/statline-infra) (este) | Terraform, k3d, chart GitOps y aplicaciones de Argo CD, documentación del proyecto |
 | [statline-backend](https://github.com/statline-iteso/statline-backend) | `api` (Node 20 + Express + Prisma), `ingesta` y `predicciones` (Python 3.12), JSON Schemas, sus `Dockerfile` |
 | [statline-frontend](https://github.com/statline-iteso/statline-frontend) | SPA en React 18 + Vite + Tailwind que consume la API |
 
@@ -49,16 +49,17 @@ Verde: implementado. Gris punteado: pendiente para la segunda mitad. Fuente edit
 
 ### Avance
 
-32 de 61 issues (144 de 277 puntos) están terminados: cimientos, los módulos de Terraform `bootstrap`, `red`, `aks` y `datos`, la ingesta de NBA de punta a punta, la API con autenticación y el catálogo, el esqueleto de predicciones, las vistas base del frontend y el CI de los tres repos. El resto está en [docs/pendientes.md](docs/pendientes.md), cada punto con su issue.
+60 de 61 issues (273 de 277 puntos) están terminados. La primera mitad dejó los cimientos, los módulos de Terraform `bootstrap`, `red`, `aks` y `datos` (en Azure), la ingesta de NBA, la API con autenticación y el catálogo, y las vistas base del frontend. La segunda mitad agregó Key Vault, Log Analytics, DNS y la plataforma, y luego movió la infraestructura de Azure a AWS Learner Lab porque se negaron los créditos de Azure (EKS, RDS, SSM, D-38); el chart con Argo CD, Redis, HPA, NetworkPolicies, PDB, monitoreo y pruebas de humo; NFL, Liga MX y los respaldos; el resto de la API; los modelos de predicción; y las vistas de boxscore, comparación, pronósticos, listas y alertas. Staging ya se desplegó y verificó en AWS, con la evidencia en [docs/evidencia/](docs/evidencia/README.md) (SL-60). Falta SL-61 (release y defensa), en [docs/pendientes.md](docs/pendientes.md).
 
 ### Cómo correrlo
 
 | Situación | Comandos | Tiempo |
 |---|---|---|
-| Suscripción nueva (una vez) | `az login` → `make bootstrap` | ~3 min |
-| Infraestructura en Azure | `cp terraform/principal/terraform.tfvars.example terraform/principal/principal.auto.tfvars` → `make plan` → `make apply` | ~15 min |
-| Al terminar | `make destroy` (AKS + PostgreSQL consumen crédito de Azure for Students) | ~10 min |
-| Sin Azure | backend: `docker compose up -d --wait` y `pnpm --filter @statline/api dev` en su repo; frontend: `pnpm dev` | 2 min |
+| Sesión del lab (cada vez) | `make creds` (pega el bloque de AWS Details) | 1 min |
+| Cuenta del lab nueva (una vez) | `make bootstrap` | ~3 min |
+| Infraestructura en AWS | `make apply-eks` → `make plan` → `make apply` → `make kubeconfig` | ~25 min |
+| Al terminar | `make destroy` (EKS, nodos, RDS y el NLB cuestan ~USD 0.30/h del presupuesto de USD 50) | ~15 min |
+| Sin AWS | backend: `docker compose up -d --wait` y `pnpm --filter @statline/api dev` en su repo; frontend: `pnpm dev` | 2 min |
 | Clúster local | `make k3d-up` / `make k3d-down` | ~2 min |
 
 ### Documentación de planeación
@@ -69,55 +70,61 @@ Roadmap por área y bitácora del proyecto: [resumen](docs/planning/README.md) �
 
 | Read | For |
 |---|---|
-| [AGENTS.md](AGENTS.md) | Start here: scope, Azure for Students constraints, stack, commands, repo layout, rules |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Every Azure resource, the cluster layout, CI/CD and GitOps flow, branch strategy |
+| [AGENTS.md](AGENTS.md) | Start here: scope, AWS Learner Lab constraints, stack, commands, repo layout, rules |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Every AWS resource, the cluster layout, CI/CD and GitOps flow, branch strategy |
 | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | How Terraform, manifests, scripts and workflows are written |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | What we decided and why, known limitations, future work |
 | [docs/BACKLOG.md](docs/BACKLOG.md) | Every issue (61), by epic and sprint |
 
 ## Prerequisites
 
-- An **Azure for Students** subscription and the **Azure CLI** (`az login`)
+- An **AWS Academy Learner Lab** (us-east-1, `LabRole`); the lab keys go in with `make creds`
 - **[mise](https://mise.jdx.dev)**, which installs every other CLI at the pinned version (see [Tooling](#tooling))
 - **Docker**, for k3d and for building images
 - **[GitHub CLI](https://cli.github.com)** (`gh`), with access to the three repos
 
 ## Tooling
 
-All CLI versions are pinned in [`mise.toml`](mise.toml): terraform, tflint, kubectl, helm, k3d, azure-cli, shellcheck and pre-commit.
+All CLI versions are pinned in [`mise.toml`](mise.toml): terraform, tflint, kubectl, helm, kubeconform, k3d, aws-cli, shellcheck and pre-commit.
 
 ```bash
 curl https://mise.run | sh        # or: brew install mise / winget install jdx.mise
 mise install                      # installs every pinned tool for this repo
 pre-commit install                # git hooks: fmt, validate, tflint, shellcheck
 make help                         # every target
+make creds                        # AWS Learner Lab, once per session: paste the AWS CLI block (AWS Details → AWS CLI → Show)
+                                  #   → profile statline-lab + AWS_* secrets in statline-infra. FROM=clipboard reads pbpaste; SKIP_GH=1 local only
+make check-creds                  # are the lab credentials still valid?
 ```
 
-## First time on a subscription
+## First time on a lab account
+
+The project runs on the AWS Learner Lab (D-38): EKS on the lab's `LabRole`, RDS PostgreSQL, SSM Parameter Store, us-east-1 only.
 
 ```bash
-az login
-az account set --subscription "<Azure for Students>"
-make bootstrap                    # resource group + storage account for remote state (local state)
-                                  # then writes terraform/principal/backend.hcl
-cp terraform/principal/terraform.tfvars.example terraform/principal/principal.auto.tfvars
-make plan                         # review: VNet, subnets, NSG, private DNS, AKS, PostgreSQL
+make creds                        # start of every lab session (see Tooling)
+make bootstrap                    # once per lab account: S3 state bucket + ingress Elastic IP (local state);
+                                  # asks before applying, then writes terraform/principal/backend.hcl
+terraform -chdir=terraform/bootstrap output -raw ingress_ip   # hosts: staging.<ip>.nip.io and <ip>.nip.io
+make apply-eks                    # step 1: only the EKS cluster and nodes (~15 min; the kubernetes/helm providers need it)
+make plan                         # step 2: everything else (RDS, SSM, namespaces, platform charts, database Job)
 make apply                        # asks before applying
-az aks get-credentials -g rg-statline -n aks-statline
+make kubeconfig                   # context eks-statline
+terraform -chdir=terraform/principal output -raw grafana_admin_password   # Grafana, user admin
 ```
 
+No tfvars are needed; `terraform/principal/terraform.tfvars.example` lists the optional overrides.
+
+**Two-step first apply.** The `kubernetes` and `helm` providers talk to the cluster created in
+`module.eks`. A single plan works (it plans 50 resources), but applying the charts in the same run
+as the cluster relies on Terraform configuring those providers late. `make apply-eks` creates the
+cluster alone first, so every later plan sees a real cluster (decision D-24).
+
+**Argo CD UI** (no public Ingress yet): `kubectl -n plataforma port-forward svc/argo-cd-argocd-server 8080:80`.
+
 > [!WARNING]
-> **Run `make destroy` when you are done for the day** unless the cluster must stay up. AKS nodes (2× Standard_B2s), the load balancer and PostgreSQL bill by the hour against the student credit. The bootstrap storage account stays; it costs cents.
+> **Run `make destroy` when you are done for the day** unless the cluster must stay up. The EKS control plane, 2 × t3.medium, RDS and the NLB bill about USD 0.30/h against the USD 50 lab budget. `make destroy` removes the platform charts first, waits for the ingress NLB to go, then destroys the rest. The bootstrap bucket and the Elastic IP stay (cents, plus ~USD 3.60/month for the IP).
 
 ### Recovering the bootstrap state
 
-The `bootstrap` stack keeps its state locally (`terraform/bootstrap/terraform.tfstate`, gitignored) because it creates the storage account every other stack stores its state in. If that file is lost, **don't** run `make bootstrap` again; import the existing resources:
-
-```bash
-cd terraform/bootstrap && terraform init
-terraform import random_string.suffix <suffix>             # the 6 chars after "ststatlinetf"
-terraform import azurerm_resource_group.tfstate /subscriptions/<sub>/resourceGroups/rg-statline-tfstate
-terraform import azurerm_storage_account.tfstate /subscriptions/<sub>/resourceGroups/rg-statline-tfstate/providers/Microsoft.Storage/storageAccounts/<name>
-terraform plan                                              # should say "No changes" (or only the role assignment)
-cd ../.. && make backend-config
-```
+The `bootstrap` stack keeps its state locally (`terraform/bootstrap/terraform.tfstate`, gitignored) because it creates the bucket every other stack stores its state in. If that file is lost, or a first apply failed halfway, just run `make bootstrap` again: `scripts/bootstrap-account.sh` imports the existing bucket and Elastic IP before the plan, so it adopts them instead of creating a second Elastic IP (which would change the address). A state left over from another lab account is moved to `terraform/bootstrap/archive/<account>/`.

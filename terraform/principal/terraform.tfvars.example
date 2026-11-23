@@ -1,4 +1,5 @@
-# Copy to principal.auto.tfvars (gitignored) and fill in.
-subscription_id = "00000000-0000-0000-0000-000000000000"
-location        = "eastus2"
-# kubernetes_version = "1.30"   # check: az aks get-versions -l eastus2 -o table
+# Optional: copy to principal.auto.tfvars (gitignored) to override defaults. Nothing is required.
+# kubernetes_version = "1.35"   # standard support only: aws eks describe-cluster-versions
+# node_count = 2
+# cluster_public_access_cidrs = ["203.0.113.4/32"]   # your IP; CI runners then can't plan
+# log_retention_days = 3

@@ -1,0 +1,51 @@
+# Environment: statline-prod, follows branch main (Argo CD Application statline-prod).
+environment: prod
+
+networkPolicies:
+  enabled: true
+
+ingress:
+  # nip.io on the bootstrap Elastic IP (terraform -chdir=terraform/bootstrap output -raw ingress_ip, D-38).
+  host: "52.71.150.91.nip.io"
+  tls:
+    enabled: true
+    secretName: statline-tls
+    clusterIssuer: letsencrypt-prod
+
+redis:
+  dbIndex: 0
+
+secrets:
+  external:
+    parameters:
+      DATABASE_URL: /statline/prod/database-url
+      JWT_SECRET: /statline/prod/jwt-secret
+      JWT_REFRESH_SECRET: /statline/prod/jwt-refresh-secret
+      API_SPORTS_KEY: /statline/comun/api-sports-key
+      BALLDONTLIE_API_KEY: /statline/comun/balldontlie-api-key
+      SEED_ADMIN_PASSWORD: /statline/prod/seed-admin-password
+
+# Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
+web:
+  image:
+    tag: "0000000"
+api:
+  autoscaling:
+    enabled: true
+  image:
+    tag: "0000000"
+predicciones:
+  autoscaling:
+    enabled: true
+  image:
+    tag: "0000000"
+ingesta:
+  config:
+    # On since D-41, as in staging (D-40): the free API-Sports plan answers nothing, so the
+    # fallbacks are the only real data. Turn it off before using a paid API-Sports key.
+    fallbackHabilitado: "true"
+  image:
+    tag: "0000000"
+
+monitoring:
+  enabled: true

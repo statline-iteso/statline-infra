@@ -1,12 +1,12 @@
-variable "subscription_id" {
+variable "region" {
   type        = string
-  description = "Azure for Students subscription id (az account show --query id -o tsv)."
-}
+  description = "AWS region. The Learner Lab only allows us-east-1 (the Makefile pins it)."
+  default     = "us-east-1"
 
-variable "location" {
-  type        = string
-  description = "Azure region. Azure for Students limits the allowed regions; check the policy."
-  default     = "eastus2"
+  validation {
+    condition     = var.region == "us-east-1"
+    error_message = "The AWS Learner Lab only allows us-east-1."
+  }
 }
 
 variable "project" {
@@ -15,7 +15,7 @@ variable "project" {
   default     = "statline"
 
   validation {
-    condition     = can(regex("^[a-z0-9]{3,10}$", var.project))
-    error_message = "3-10 lowercase alphanumerics (it goes into the storage account name)."
+    condition     = can(regex("^[a-z0-9-]{3,20}$", var.project))
+    error_message = "3-20 lowercase alphanumerics or dashes (it goes into the bucket name)."
   }
 }

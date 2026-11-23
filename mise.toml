@@ -1,10 +1,11 @@
 # Pinned CLI versions for this repo: `mise install`.
 [tools]
-terraform = "1.9.8"
+terraform = "1.10.5"
 tflint = "0.54.0"
-kubectl = "1.30.6"
+kubectl = "1.35.9"
 helm = "3.16.3"
+kubeconform = "0.8.0"
 k3d = "5.7.4"
-azure-cli = "2.67.0"
+aws-cli = "2.34.34"
 shellcheck = "0.10.0"
 pre-commit = "4.0.1"

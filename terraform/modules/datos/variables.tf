@@ -1,58 +1,47 @@
 variable "name" {
   type        = string
-  description = "Base name for resources."
+  description = "Base name for resources (e.g. statline)."
 }
 
-variable "suffix" {
+variable "identifier" {
   type        = string
-  description = "Random suffix: server names are globally unique."
+  description = "RDS instance identifier (also names its CloudWatch log group, module observabilidad)."
 }
 
-variable "resource_group_name" {
+variable "vpc_id" {
   type        = string
-  description = "Resource group for the server."
+  description = "VPC of the database security group."
 }
 
-variable "location" {
-  type        = string
-  description = "Azure region."
+variable "private_subnet_ids" {
+  type        = list(string)
+  description = "Private subnets in two AZs (DB subnet group)."
 }
 
-variable "subnet_id" {
+variable "cluster_security_group_id" {
   type        = string
-  description = "Subnet delegated to Microsoft.DBforPostgreSQL/flexibleServers (module red)."
+  description = "EKS cluster security group, the only source allowed on 5432."
 }
 
-variable "private_dns_zone_id" {
+variable "instance_class" {
   type        = string
-  description = "Private DNS zone *.postgres.database.azure.com (module red)."
-}
-
-variable "sku_name" {
-  type        = string
-  description = "Server SKU (proposal: B_Standard_B1ms)."
-  default     = "B_Standard_B1ms"
+  description = "RDS instance class. Burstable only (budget)."
+  default     = "db.t3.micro"
 
   validation {
-    condition     = startswith(var.sku_name, "B_")
-    error_message = "Burstable SKUs only (Azure for Students budget)."
+    condition     = can(regex("^db\\.t[34]g?\\.", var.instance_class))
+    error_message = "Burstable classes only (db.t3.*, db.t4g.*)."
   }
 }
 
 variable "admin_login" {
   type        = string
-  description = "Administrator login."
-  default     = "statlineadmin"
+  description = "Master user name."
+  default     = "statline_admin"
 }
 
-variable "database_name" {
-  type        = string
-  description = "Application database."
-  default     = "statline"
-}
-
-variable "tags" {
-  type        = map(string)
-  description = "Tags for every resource."
-  default     = {}
+variable "bases_de_datos" {
+  type        = list(string)
+  description = "Application databases, one per environment (statline_<env>)."
+  default     = ["statline_staging", "statline_prod"]
 }

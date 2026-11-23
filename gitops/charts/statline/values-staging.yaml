@@ -1,0 +1,52 @@
+# Environment: statline-staging, follows branch develop (Argo CD Application statline-staging).
+environment: staging
+
+networkPolicies:
+  enabled: true
+
+ingress:
+  # nip.io on the bootstrap Elastic IP (terraform -chdir=terraform/bootstrap output -raw ingress_ip, D-38).
+  host: "staging.52.71.150.91.nip.io"
+  tls:
+    enabled: true
+    secretName: statline-tls
+    # letsencrypt-prod since D-39: the staging issuer's untrusted chain broke browsers and the public smoke check.
+    clusterIssuer: letsencrypt-prod
+
+redis:
+  dbIndex: 1
+
+secrets:
+  external:
+    parameters:
+      DATABASE_URL: /statline/staging/database-url
+      JWT_SECRET: /statline/staging/jwt-secret
+      JWT_REFRESH_SECRET: /statline/staging/jwt-refresh-secret
+      API_SPORTS_KEY: /statline/comun/api-sports-key
+      BALLDONTLIE_API_KEY: /statline/comun/balldontlie-api-key
+      SEED_ADMIN_PASSWORD: /statline/staging/seed-admin-password
+
+# Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
+web:
+  image:
+    tag: "31ac3c3"
+api:
+  autoscaling:
+    enabled: true
+  image:
+    tag: "616a703"
+predicciones:
+  autoscaling:
+    enabled: true
+  image:
+    tag: "616a703"
+ingesta:
+  config:
+    # On since D-40: the free API-Sports plan answers nothing, so the fallbacks are the only real data
+    # and no game can arrive from two providers. Prod too since D-41.
+    fallbackHabilitado: "true"
+  image:
+    tag: "616a703"
+
+monitoring:
+  enabled: true
