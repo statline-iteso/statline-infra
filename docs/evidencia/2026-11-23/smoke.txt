@@ -1,0 +1,18 @@
+# 2026-11-23T00:27:10Z  make smoke ENV=staging
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+ok    http://statline-staging-web/healthz -> 200 (attempt 1)
+ok    http://statline-staging-api/healthz -> 200 (attempt 1)
+ok    http://statline-staging-api/readyz -> 200 (attempt 1)
+ok    http://statline-staging-predicciones/healthz -> 200 (attempt 1)
+ok    http://statline-staging-predicciones/readyz -> 200 (attempt 1)
+all smoke checks passed
+pod "statline-smoke" deleted from statline-staging namespace
+exit=0
+
+# 2026-11-23T00:27:15Z  scripts/smoke.sh https://staging.52.71.150.91.nip.io
+Smoke checks against https://staging.52.71.150.91.nip.io
+ok    https://staging.52.71.150.91.nip.io/healthz -> 200 (attempt 1)
+ok    https://staging.52.71.150.91.nip.io/api/ligas -> 401 (attempt 1)
+public smoke checks passed
+exit=0

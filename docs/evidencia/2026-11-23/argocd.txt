@@ -1,0 +1,12 @@
+# 2026-11-23T00:27:08Z  Argo CD applications
+NAME                SYNC STATUS   HEALTH STATUS
+plataforma-config   Synced        Healthy
+redis               Synced        Healthy
+root                OutOfSync     Healthy
+statline-prod       Unknown       Healthy
+statline-staging    Synced        Healthy
+
+# statline-staging last sync
+revision: 92416a17ac8ce68ec333ce9b39aa5590011b862b
+sync: Synced  health: Healthy  phase: Succeeded  finished: 2026-11-23T00:24:53Z
+hook Job/statline-staging-smoke PostSync Succeeded: Reached expected number of succeeded pods

@@ -1,0 +1,29 @@
+# 2026-11-23T00:26:33Z  ingesta runs in statline-staging (kubectl get jobs; last result line of each)
+NAME                             STATUS     COMPLETIONS   DURATION   AGE
+backfill-americano-1795393274    Failed     0/1           5m18s      5m18s
+backfill-basquetbol-1795393213   Failed     0/1           6m19s      6m19s
+backfill-basquetbol-1795393272   Failed     0/1           5m21s      5m21s
+backfill-futbol-1795393277       Failed     0/1           5m15s      5m15s
+demo-seed                        Complete   1/1           2m26s      4m14s
+ingesta-americano-1795392868     Failed     0/1           12m        12m
+ingesta-basquetbol-1795392868    Failed     0/1           12m        12m
+ingesta-futbol-1795392868        Failed     0/1           12m        12m
+
+== job.batch/backfill-americano-1795393274  args: ["run","americano","--desde","2026-11-22","--hasta","2026-11-22"]
+2026-11-23 00:21:20,553 INFO ingesta resultado ResultadoEjecucion(ejecucion_id='c89bfd83-7101-430d-a23f-bdbc50ecad72', exitosa=False, partidos=0, estadisticas=0, descartadas=0, error="ApiSportsError: /games: {'plan': 'Free plans do not have access to this season, try from 2022 to 2024.'}")
+== job.batch/backfill-basquetbol-1795393213  args: ["run","basquetbol","--desde","2024-12-25","--hasta","2024-12-25"]
+2026-11-23 00:20:18,981 INFO ingesta resultado ResultadoEjecucion(ejecucion_id='1c556c76-e26c-4289-908e-86e222707e62', exitosa=False, partidos=0, estadisticas=0, descartadas=0, error="ApiSportsError: /games: {'plan': 'Free plans do not have access to this date, try from 2026-11-22 to 2026-11-24.'}")
+== job.batch/backfill-basquetbol-1795393272  args: ["run","basquetbol","--desde","2026-11-22","--hasta","2026-11-22"]
+2026-11-23 00:21:17,660 INFO ingesta resultado ResultadoEjecucion(ejecucion_id='0e5e6d07-fcc1-4369-8e9b-0d596b3f2c32', exitosa=False, partidos=0, estadisticas=0, descartadas=0, error="ApiSportsError: /games: {'plan': 'Free plans do not have access to this season, try from 2022 to 2024.'}")
+== job.batch/backfill-futbol-1795393277  args: ["run","futbol","--desde","2026-11-22","--hasta","2026-11-22"]
+2026-11-23 00:21:23,137 INFO ingesta resultado ResultadoEjecucion(ejecucion_id='6bcf283b-1f6f-413f-b4cf-e41457105404', exitosa=False, partidos=0, estadisticas=0, descartadas=0, error="ApiSportsError: /fixtures: {'plan': 'Free plans do not have access to this season, try from 2022 to 2024.'}")
+== job.batch/demo-seed  args: ["seed-demo","--confirmar"]
+2026-11-23 00:23:32,382 INFO ingesta seed-demo ResultadoDemo(deporte=<Deporte.BASQUETBOL: 'BASQUETBOL'>, exitosa=True, partidos=618, estadisticas=13948, error=None)
+2026-11-23 00:23:50,387 INFO ingesta seed-demo ResultadoDemo(deporte=<Deporte.AMERICANO: 'AMERICANO'>, exitosa=True, partidos=145, estadisticas=3880, error=None)
+2026-11-23 00:24:44,617 INFO ingesta seed-demo ResultadoDemo(deporte=<Deporte.FUTBOL: 'FUTBOL'>, exitosa=True, partidos=436, estadisticas=11312, error=None)
+== job.batch/ingesta-americano-1795392868  args: ["run","americano"]
+2026-11-23 00:14:38,035 INFO ingesta resultado ResultadoEjecucion(ejecucion_id='192b25e5-8206-4105-9436-3f5fd3cc72a5', exitosa=False, partidos=0, estadisticas=0, descartadas=0, error="ApiSportsError: /games: {'plan': 'Free plans do not have access to this season, try from 2022 to 2024.'}")
+== job.batch/ingesta-basquetbol-1795392868  args: ["run","basquetbol"]
+2026-11-23 00:14:38,144 INFO ingesta resultado ResultadoEjecucion(ejecucion_id='99ec2916-6d07-4426-bc14-b73cdb447f6d', exitosa=False, partidos=0, estadisticas=0, descartadas=0, error="ApiSportsError: /games: {'plan': 'Free plans do not have access to this season, try from 2022 to 2024.'}")
+== job.batch/ingesta-futbol-1795392868  args: ["run","futbol"]
+2026-11-23 00:14:38,179 INFO ingesta resultado ResultadoEjecucion(ejecucion_id='4011d536-f4fd-4b30-8623-225d766300af', exitosa=False, partidos=0, estadisticas=0, descartadas=0, error="ApiSportsError: /fixtures: {'plan': 'Free plans do not have access to this season, try from 2022 to 2024.'}")

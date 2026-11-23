@@ -1,0 +1,13 @@
+# 2026-11-23T00:25:25Z  train and generate in statline-staging (in-cluster, direct to predicciones)
+reentrenar BASQUETBOL RESULTADO_PARTIDO  log_loss=0.5879 baseline=0.6944 nTrain=481 nTest=126 activado=True version=20261123002529-synthetic
+reentrenar BASQUETBOL PROYECCION_JUGADOR mae=1.5282 baseline=1.5542 nTrain=11051 nTest=2897 activado=True version=20261123002538-synthetic
+reentrenar AMERICANO RESULTADO_PARTIDO   log_loss=0.6765 baseline=0.6936 nTrain=105 nTest=30 activado=True version=20261123002538-synthetic
+reentrenar AMERICANO PROYECCION_JUGADOR  mae=22.6906 baseline=24.2300 nTrain=3013 nTest=867 activado=True version=20261123002539-synthetic
+reentrenar FUTBOL RESULTADO_PARTIDO      log_loss=0.9601 baseline=1.0593 nTrain=337 nTest=85 activado=True version=20261123002540-synthetic
+reentrenar FUTBOL PROYECCION_JUGADOR     mae=0.4198 baseline=0.4497 nTrain=9045 nTest=2267 activado=True version=20261123002546-synthetic
+pronosticos/generar BASQUETBOL           generados=11 modelo=bc512759-0ccc-4eea-a946-3d549d2a207a
+proyecciones/generar BASQUETBOL          generados=104 modelo=c1cca2d6-078a-482d-9663-96bfffb2a05c
+pronosticos/generar AMERICANO            generados=6 modelo=1233a5d8-e776-40f5-a579-7cece8b2872f
+proyecciones/generar AMERICANO           generados=140 modelo=16d3cdb0-58a9-4ab3-b6ea-1ed22c45931d
+pronosticos/generar FUTBOL               generados=14 modelo=ed4a3434-9e83-4cb1-8833-2d381114d4ea
+proyecciones/generar FUTBOL              generados=150 modelo=37fb3058-8c7c-4196-97d6-f2e2bb671cde

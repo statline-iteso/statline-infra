@@ -132,6 +132,8 @@ done
 
 A model is activated only if it beats its baseline (backend D-31): `activado: false` with a `motivo` is a valid answer. Training can outlast the api's 30 s proxy timeout (503) while predicciones still finishes; check `GET $H/api/modelos`.
 
+**With the free API-Sports plan** every run fails with `Free plans do not have access to this season` (DECISIONS, known limitations), so use the demo data below.
+
 **Without enough real games (demo only, staging only).** `ingesta seed-demo` writes synthetic games marked `demo` (backend D-29), enough for every model to activate. Run it as a one-off Job from the NBA CronJob spec, which already has the database secret:
 
 ```bash

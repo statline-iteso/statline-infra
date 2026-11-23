@@ -1,0 +1,10 @@
+# 2026-11-23T00:26:17Z  scripts/smoke.sh https://staging.52.71.150.91.nip.io  (letsencrypt-prod certificate, D-39)
+Smoke checks against https://staging.52.71.150.91.nip.io
+ok    https://staging.52.71.150.91.nip.io/healthz -> 200 (attempt 1)
+ok    https://staging.52.71.150.91.nip.io/api/ligas -> 401 (attempt 1)
+public smoke checks passed
+exit=0
+
+subject=CN=staging.52.71.150.91.nip.io
+issuer=C=US, O=Let's Encrypt, CN=YR1
+notAfter=Feb 20 23:26:35 2027 GMT
