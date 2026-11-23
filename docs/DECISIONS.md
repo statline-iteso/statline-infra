@@ -225,6 +225,7 @@ Staging used `letsencrypt-staging`, whose chain no browser or curl trusts: every
 - The CI `plan` only runs while the lab keys are valid; otherwise it skips with a notice.
 - No WAF, no private API endpoint for the cluster (cost and complexity).
 - Apps use the PostgreSQL master login for both environments (D-16); per-app roles need the `postgresql` provider.
+- **API-Sports free plan returns no games we can use** (seen 2026-11-23): it serves only the 2022–2024 seasons and only dates within about a day of today, so neither the current seasons nor a 2024 backfill work. The CronJobs keep the current seasons and fail visibly. The fallback providers do not take over, because a plan restriction is not an outage (`con_respaldo.py` falls back only on quota, 5xx, 429 or network errors). Staging runs on `seed-demo` data (backend D-29). A paid key, or a backend change that treats the plan error as "unavailable", fixes it.
 
 ## 4. Future work
 
