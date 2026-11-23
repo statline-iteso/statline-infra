@@ -13,7 +13,7 @@ Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** 
 
 ## Decisiones que faltan al desplegar prod
 
-- **Respaldo en prod:** staging ingesta por los proveedores de respaldo (D-40), porque el plan gratuito de API-Sports no responde nada útil. Prod tiene `fallbackHabilitado: "false"` y fallaría igual hasta que el release decida activarlo, con el mismo razonamiento de D-40.
+- Respaldo en prod: decidido, activo como en staging (D-41).
 - `networkPolicies.kubeApiCidr` solo si se usa `api.ingestaLanzador: kubernetes`.
 
 ## Configuración en GitHub y AWS (lista)
