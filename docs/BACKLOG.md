@@ -2,7 +2,7 @@
 
 The whole project backlog (proposal §6): **61 issues, 277 story points, nine epics**. Each issue lives in the repo that owns the work; the [GitHub Project](https://github.com/orgs/statline-iteso/projects) shows all of them on one board with the fields Épica, Sprint, Estimación and Prioridad. Per-repo views: [backend](https://github.com/statline-iteso/statline-backend/blob/develop/docs/BACKLOG.md) · [frontend](https://github.com/statline-iteso/statline-frontend/blob/develop/docs/BACKLOG.md).
 
-**Progress:** 59 of 61 issues done · 269 of 277 points.
+**Progress:** 60 of 61 issues done · 273 of 277 points.
 
 **How to read it**
 
@@ -23,8 +23,8 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 | E6 | Frontend | 9 | 36 | 36 |
 | E7 | Pipeline de CI/CD | 5 | 24 | 24 |
 | E8 | Observabilidad y resiliencia | 5 | 18 | 18 |
-| E9 | Documentación y entrega | 3 | 12 | 4 |
-| **Total** | | **61** | **277** | **269** |
+| E9 | Documentación y entrega | 3 | 12 | 8 |
+| **Total** | | **61** | **277** | **273** |
 
 ## Sprints
 
@@ -608,14 +608,14 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 - [x] docs/ARCHITECTURE.md, docs/modelo-datos.md y docs/api.md
 - [x] Diagrama de la solución (Mermaid) y estrategia de ramas
 
-### ⏳ [SL-60](https://github.com/statline-iteso/statline-infra/issues/19) · Evidencia de despliegue y runbook de operación
+### ✅ [SL-60](https://github.com/statline-iteso/statline-infra/issues/19) · Evidencia de despliegue y runbook de operación
 
 **Sprint:** S6 · **Points:** 4 · **Priority:** Media · **Repo:** `statline-infra`
 
 **Acceptance criteria**
 
-- [ ] Capturas de EKS, Argo CD, Grafana y pruebas de humo
-- [x] Runbook de alta y baja del ambiente ([RUNBOOK.md](RUNBOOK.md), secciones 1–3 y 8)
+- [x] Capturas de EKS, Argo CD, Grafana y pruebas de humo ([evidencia/](evidencia/README.md), sesión del 2026-11-23 en AWS Learner Lab: clúster, Argo CD, Grafana, pruebas de humo, ingesta real por deporte, simulacro de rollback y `make destroy`; falta solo el resumen de `make apply`, que se agrega en la siguiente reconstrucción)
+- [x] Runbook de alta y baja del ambiente ([RUNBOOK.md](RUNBOOK.md), secciones 1–3, 6 y 8)
 
 ### ⏳ [SL-61](https://github.com/statline-iteso/statline-infra/issues/20) · Entrega final y defensa del proyecto
 
