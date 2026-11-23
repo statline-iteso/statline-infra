@@ -295,6 +295,8 @@ Staging and prod use `syncPolicy.retry.limit: 2` with backoff from 10 s (factor 
    ```
    If the lab session ends mid-destroy, run `make creds` and `make destroy` again: Terraform resumes from the state in S3.
 
+   **The session ended with the environment up.** The lab stops the nodes and the node group replaces them. If the lab is restarted within minutes, the new nodes join on their own. If not, they boot while the lab still denies `ec2:DescribeInstances`, their bootstrap (`nodeadm`) gives up, and they stay `running` without joining (`kubectl get nodes` is empty, every pod Pending), while EKS, RDS, the NLB and the instances keep billing. After `make creds`, the console output confirms it (`aws ec2 get-console-output --latest --instance-id <id>` shows `exceeded max wait time for InstanceCondition waiter`); reboot the node instances (`aws ec2 reboot-instances --instance-ids …`) and they join within a few minutes. Then destroy, or carry on.
+
    **A chart uninstall times out** (`context deadline exceeded`, for example on `external_secrets`): an object still carries the finalizer of a controller that is already gone, so its CRD or namespace cannot be deleted. `scripts/vaciar-gitops.sh` prevents this; if it happens anyway, clear the leftover finalizers (the cluster is being destroyed, nothing else depends on them) and rerun `make destroy`:
    ```bash
    kubectl get externalsecrets.external-secrets.io -A -o name 2>/dev/null   # and applications.argoproj.io in plataforma
