@@ -47,7 +47,8 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-37 | 2026-11-19 | Leagues and the first ADMIN come from the api image's seed, run as a second initContainer; the admin password is a per-environment `random_password` in Key Vault | Decided (password in SSM since D-38) |
 | D-38 | 2026-11-21 | Move from Azure to the AWS Learner Lab (Azure credits denied): EKS with `LabRole`, RDS PostgreSQL, SSM Parameter Store + External Secrets, an Elastic IP + nip.io for the ingress; S3 state with native locking. Supersedes D-02 and the Azure-specific parts of later decisions | Decided |
 | D-39 | 2026-11-22 | Staging uses the `letsencrypt-prod` ClusterIssuer too; `letsencrypt-staging` stays for testing issuance | Decided |
-| D-40 | 2026-11-23 | Staging ingests through the fallback providers (`fallbackHabilitado: "true"`): balldontlie for NBA, TheSportsDB for NFL and Liga MX. Prod stays off | Decided |
+| D-40 | 2026-11-23 | Staging ingests through the fallback providers (`fallbackHabilitado: "true"`): balldontlie for NBA, TheSportsDB for NFL and Liga MX. Prod stays off | Superseded in part by D-41 |
+| D-41 | 2026-11-23 | Prod also ingests through the fallback providers for v1.0.0 (`fallbackHabilitado: "true"`), with the reasoning of D-40 | Decided |
 
 ## 2. Details
 
@@ -216,7 +217,10 @@ Cost while up, list prices: EKS 0.10 + 2 × t3.medium 0.083 + RDS 0.018 + NLB 0.
 Staging used `letsencrypt-staging`, whose chain no browser or curl trusts: every page showed a warning (unusable for demos and evidence) and `scripts/smoke.sh` failed with status 000 unless given the test roots. Both environments now use `letsencrypt-prod`. **Risk:** nip.io is not on the Public Suffix List, so Let's Encrypt's 50 certificates per registered domain per week is shared by every nip.io user, and an issuance can fail with `rateLimited` (prod has the same exposure). cert-manager keeps retrying; if it stays blocked, switch that environment back to `letsencrypt-staging` and say so in the evidence. **Kept:** the `letsencrypt-staging` ClusterIssuer, for testing a new host or issuer setting without spending real issuances. **Rejected:** `curl -k` or a CA bundle in the smoke script (hides real TLS failures).
 
 ### D-40 · Staging ingests from the fallback providers
-The free API-Sports plan answers every current request with a plan error, and since backend D-38 that switches a run to the fallback. With fallback off, staging could only fail. Staging now sets `fallbackHabilitado: "true"`: NBA from balldontlie (key in SSM `/statline/comun/balldontlie-api-key`), NFL and Liga MX from TheSportsDB (public key `123`). **Why the duplicate risk (backend D-26) does not apply here:** a game is stored twice only when API-Sports and a fallback both report it, and on the free plan API-Sports reports nothing. A paid API-Sports key would bring the risk back; turn fallback off before using one. **Limits:** TheSportsDB's free tier has games and scores but no player box scores, and may list only part of a day. **Prod** stays off until the release (SL-61) decides, with the same reasoning.
+The free API-Sports plan answers every current request with a plan error, and since backend D-38 that switches a run to the fallback. With fallback off, staging could only fail. Staging now sets `fallbackHabilitado: "true"`: NBA from balldontlie (key in SSM `/statline/comun/balldontlie-api-key`), NFL and Liga MX from TheSportsDB (public key `123`). **Why the duplicate risk (backend D-26) does not apply here:** a game is stored twice only when API-Sports and a fallback both report it, and on the free plan API-Sports reports nothing. A paid API-Sports key would bring the risk back; turn fallback off before using one. **Limits:** TheSportsDB's free tier has games and scores but no player box scores, and may list only part of a day. **Prod** stayed off until the release decided (D-41).
+
+### D-41 · Prod ingests from the fallback providers too
+For v1.0.0 (SL-61) prod gets the same setting as staging. With fallback off, every prod run would end in the free plan's error and prod would show no real games. The duplicate risk is the same as in D-40, none while API-Sports reports nothing. **Turn fallback off in both environments** before switching to a paid API-Sports key, and verify deduplication (backend D-26) before turning it back on.
 
 ## 3. Known limitations
 
@@ -229,7 +233,7 @@ The free API-Sports plan answers every current request with a plan error, and si
 - The CI `plan` only runs while the lab keys are valid; otherwise it skips with a notice.
 - No WAF, no private API endpoint for the cluster (cost and complexity).
 - Apps use the PostgreSQL master login for both environments (D-16); per-app roles need the `postgresql` provider.
-- **API-Sports free plan returns no games we can use** (seen 2026-11-23): it serves only the 2022–2024 seasons and only dates within about a day of today. Since backend D-38 a plan error switches the run to the fallback providers, and staging has them on (D-40), so staging ingests real games from balldontlie and TheSportsDB. Prod has fallback off and would fail the same way until the release decides. Box scores for NFL and Liga MX need a paid provider.
+- **API-Sports free plan returns no games we can use** (seen 2026-11-23): it serves only the 2022–2024 seasons and only dates within about a day of today. Since backend D-38 a plan error switches the run to the fallback providers, and staging has them on (D-40), so staging ingests real games from balldontlie and TheSportsDB. Prod has them on too (D-41). Box scores for NFL and Liga MX need a paid provider.
 
 ## 4. Future work
 
