@@ -47,6 +47,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-37 | 2026-11-19 | Leagues and the first ADMIN come from the api image's seed, run as a second initContainer; the admin password is a per-environment `random_password` in Key Vault | Decided (password in SSM since D-38) |
 | D-38 | 2026-11-21 | Move from Azure to the AWS Learner Lab (Azure credits denied): EKS with `LabRole`, RDS PostgreSQL, SSM Parameter Store + External Secrets, an Elastic IP + nip.io for the ingress; S3 state with native locking. Supersedes D-02 and the Azure-specific parts of later decisions | Decided |
 | D-39 | 2026-11-22 | Staging uses the `letsencrypt-prod` ClusterIssuer too; `letsencrypt-staging` stays for testing issuance | Decided |
+| D-40 | 2026-11-23 | Staging ingests through the fallback providers (`fallbackHabilitado: "true"`): balldontlie for NBA, TheSportsDB for NFL and Liga MX. Prod stays off | Decided |
 
 ## 2. Details
 
@@ -147,7 +148,7 @@ The chart lives at `gitops/charts/statline` so the Redis chart can sit beside it
 
 
 ### D-30 · Backend contract knobs and ingestion launcher
-`CACHE_TTL_S`, `RATE_LIMIT_PER_MIN`, `RATE_LIMIT_LOGIN_PER_MIN`, `INGESTA_LANZADOR`, `THESPORTSDB_API_KEY` and `FALLBACK_HABILITADO` are ConfigMap values; `BALLDONTLIE_API_KEY` is an optional Secret key. The api ServiceAccount token and a namespaced Role/RoleBinding (`get` cronjobs, `create` jobs) are rendered only when `api.ingestaLanzador: kubernetes`, so the default pod has no API server access. `FALLBACK_HABILITADO` is `"false"` in staging and prod because fallback data can duplicate games. The api migrate initContainer keeps `secretKeyRef` for `DATABASE_URL`: the pod mounts the CSI volume, volumes are mounted before container env is resolved, so the synced Secret exists in time. **Trade-off:** the first pod after a fresh install may show a short `CreateContainerConfigError` while the driver syncs.
+`CACHE_TTL_S`, `RATE_LIMIT_PER_MIN`, `RATE_LIMIT_LOGIN_PER_MIN`, `INGESTA_LANZADOR`, `THESPORTSDB_API_KEY` and `FALLBACK_HABILITADO` are ConfigMap values; `BALLDONTLIE_API_KEY` is an optional Secret key. The api ServiceAccount token and a namespaced Role/RoleBinding (`get` cronjobs, `create` jobs) are rendered only when `api.ingestaLanzador: kubernetes`, so the default pod has no API server access. `FALLBACK_HABILITADO` was `"false"` in staging and prod because fallback data can duplicate games; staging turned it on in D-40. The api migrate initContainer keeps `secretKeyRef` for `DATABASE_URL`: the pod mounts the CSI volume, volumes are mounted before container env is resolved, so the synced Secret exists in time. **Trade-off:** the first pod after a fresh install may show a short `CreateContainerConfigError` while the driver syncs.
 
 
 ### D-31 · HPA, PDBs and NetworkPolicies
@@ -214,6 +215,9 @@ Cost while up, list prices: EKS 0.10 + 2 × t3.medium 0.083 + RDS 0.018 + NLB 0.
 ### D-39 · Trusted certificates in staging
 Staging used `letsencrypt-staging`, whose chain no browser or curl trusts: every page showed a warning (unusable for demos and evidence) and `scripts/smoke.sh` failed with status 000 unless given the test roots. Both environments now use `letsencrypt-prod`. **Risk:** nip.io is not on the Public Suffix List, so Let's Encrypt's 50 certificates per registered domain per week is shared by every nip.io user, and an issuance can fail with `rateLimited` (prod has the same exposure). cert-manager keeps retrying; if it stays blocked, switch that environment back to `letsencrypt-staging` and say so in the evidence. **Kept:** the `letsencrypt-staging` ClusterIssuer, for testing a new host or issuer setting without spending real issuances. **Rejected:** `curl -k` or a CA bundle in the smoke script (hides real TLS failures).
 
+### D-40 · Staging ingests from the fallback providers
+The free API-Sports plan answers every current request with a plan error, and since backend D-38 that switches a run to the fallback. With fallback off, staging could only fail. Staging now sets `fallbackHabilitado: "true"`: NBA from balldontlie (key in SSM `/statline/comun/balldontlie-api-key`), NFL and Liga MX from TheSportsDB (public key `123`). **Why the duplicate risk (backend D-26) does not apply here:** a game is stored twice only when API-Sports and a fallback both report it, and on the free plan API-Sports reports nothing. A paid API-Sports key would bring the risk back; turn fallback off before using one. **Limits:** TheSportsDB's free tier has games and scores but no player box scores, and may list only part of a day. **Prod** stays off until the release (SL-61) decides, with the same reasoning.
+
 ## 3. Known limitations
 
 - **Learner Lab budget and sessions** (D-38): USD 50 in all, and the keys expire with each session. `make destroy` at the end of every session; `make creds` at the start.
@@ -225,7 +229,7 @@ Staging used `letsencrypt-staging`, whose chain no browser or curl trusts: every
 - The CI `plan` only runs while the lab keys are valid; otherwise it skips with a notice.
 - No WAF, no private API endpoint for the cluster (cost and complexity).
 - Apps use the PostgreSQL master login for both environments (D-16); per-app roles need the `postgresql` provider.
-- **API-Sports free plan returns no games we can use** (seen 2026-11-23): it serves only the 2022–2024 seasons and only dates within about a day of today, so neither the current seasons nor a 2024 backfill work. The CronJobs keep the current seasons and fail visibly. The fallback providers do not take over, because a plan restriction is not an outage (`con_respaldo.py` falls back only on quota, 5xx, 429 or network errors). Staging runs on `seed-demo` data (backend D-29). A paid key, or a backend change that treats the plan error as "unavailable", fixes it.
+- **API-Sports free plan returns no games we can use** (seen 2026-11-23): it serves only the 2022–2024 seasons and only dates within about a day of today. Since backend D-38 a plan error switches the run to the fallback providers, and staging has them on (D-40), so staging ingests real games from balldontlie and TheSportsDB. Prod has fallback off and would fail the same way until the release decides. Box scores for NFL and Liga MX need a paid provider.
 
 ## 4. Future work
 
