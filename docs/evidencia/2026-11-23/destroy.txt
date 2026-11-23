@@ -1,0 +1,9 @@
+# 2026-11-23T03:45:56Z  after make destroy ("Destroy complete! Resources: 40 destroyed."); lab cost readout: USD 3.1 used of 50
+eks clusters: 
+rds instances: 
+load balancers: 
+running/pending/stopped instances: 
+nat gateways: 
+elastic IPs (bootstrap keeps the ingress one): 52.71.150.91 None 
+unattached EBS volumes: 
+VPCs tagged statline: 

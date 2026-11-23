@@ -1,0 +1,39 @@
+# 2026-11-23T02:46:10Z  BEFORE the drill
+Argo CD: 026de22355999430399501798ce8db1d8429b4d8 Synced Healthy
+NAME                            IMAGE                                      READY
+statline-staging-api            docker.io/pardosito/api:6a763e8            2
+statline-staging-predicciones   docker.io/pardosito/predicciones:6a763e8   1
+statline-staging-web            docker.io/pardosito/web:1d11fbc            2
+cronjob ingesta image: docker.io/pardosito/ingesta:6a763e8
+
+# Revert PR #68 (git revert of 026de22 / bump PR #67): opened 2026-11-23T02:46:37Z, merged 2026-11-23T02:48:54Z as 56a1d5e, Argo CD Synced and Healthy 2026-11-23T02:49:29Z
+
+# 2026-11-23T02:49:39Z  AFTER the rollback
+Argo CD: 56a1d5e088e4743df11412f56626699084162b96 Synced Degraded
+NAME                            IMAGE                                      READY
+statline-staging-api            docker.io/pardosito/api:280774b            2
+statline-staging-predicciones   docker.io/pardosito/predicciones:280774b   1
+statline-staging-web            docker.io/pardosito/web:1d11fbc            2
+cronjob ingesta image: docker.io/pardosito/ingesta:280774b
+hook Job/statline-staging-smoke PostSync Succeeded
+
+# make smoke ENV=staging
+ok    http://statline-staging-web/healthz -> 200 (attempt 1)
+ok    http://statline-staging-api/healthz -> 200 (attempt 1)
+ok    http://statline-staging-api/readyz -> 200 (attempt 1)
+ok    http://statline-staging-predicciones/healthz -> 200 (attempt 1)
+ok    http://statline-staging-predicciones/readyz -> 200 (attempt 1)
+all smoke checks passed
+
+# scripts/smoke.sh https://staging.52.71.150.91.nip.io
+ok    https://staging.52.71.150.91.nip.io/healthz -> 200 (attempt 1)
+ok    https://staging.52.71.150.91.nip.io/api/ligas -> 401 (attempt 1)
+public smoke checks passed
+Health: Degraded at 02:49:57Z (HPA without CPU metrics while the new pods started), Healthy at 02:50:19Z.
+
+# 2026-11-23T02:54:34Z  FORWARD again: PR #69 (revert of #68) merged as 8526523
+Argo CD: 85265233d5b51bafadac58e212c534abde6d0ab7 Synced Healthy
+NAME                            IMAGE                                      READY
+statline-staging-api            docker.io/pardosito/api:6a763e8            2
+statline-staging-predicciones   docker.io/pardosito/predicciones:6a763e8   1
+statline-staging-web            docker.io/pardosito/web:1d11fbc            2
