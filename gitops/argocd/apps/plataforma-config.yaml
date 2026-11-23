@@ -10,9 +10,9 @@ spec:
   source:
     repoURL: https://github.com/statline-iteso/statline-infra.git
     targetRevision: develop
+    # No `directory.recurse: false`: it is the default, so Argo CD drops it from the stored
+    # Application and `root` showed OutOfSync forever.
     path: gitops/plataforma
-    directory:
-      recurse: false
   destination:
     server: https://kubernetes.default.svc
     namespace: plataforma
