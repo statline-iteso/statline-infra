@@ -34,18 +34,18 @@ api:
   autoscaling:
     enabled: true
   image:
-    tag: "6a763e8"
+    tag: "4d35783"
 predicciones:
   autoscaling:
     enabled: true
   image:
-    tag: "6a763e8"
+    tag: "4d35783"
 ingesta:
   config:
     # Fallback data can duplicate games; keep off until deduplication is verified.
     fallbackHabilitado: "false"
   image:
-    tag: "6a763e8"
+    tag: "4d35783"
 
 monitoring:
   enabled: true
