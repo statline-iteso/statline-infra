@@ -146,8 +146,9 @@ Rendered only when `monitoring.enabled` is true (staging and prod; k3d is off be
 | api | `statline_http_request_duration_seconds` (histogram) | `method`, `route` (no status) |
 | predicciones | `statline_predicciones_requests_total` | `method`, `path`, `status` |
 | predicciones | `statline_predicciones_request_seconds` (histogram) | `method`, `path` |
+| api | `statline_cache_requests_total` | `result` (`hit`, `miss`, `bypass`) |
 
-The api has no `statline_cache_requests_total` yet. The cache panels and nothing else depend on it; they show No data until the backend exposes it.
+The two cache panels use `statline_cache_requests_total` (backend ARCHITECTURE, cache). The hit ratio shows No data until the first hit in the time window.
 
 **Ingesta is not scraped.** Its CronJobs are short-lived and only the `serve` mode exposes metrics, which no Deployment runs. Its health comes from kube-state-metrics: `kube_job_status_failed` joined with `kube_job_owner` (owner kind `CronJob`, name `*-ingesta-*`) and `kube_cronjob_status_last_successful_time`.
 
