@@ -15,7 +15,7 @@ AWS_PROFILE ?= statline-lab
 export AWS_PROFILE
 endif
 
-.PHONY: help creds check-creds bootstrap backend-config init plan apply secrets apply-eks kubeconfig destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
+.PHONY: help creds check-creds bootstrap backend-config init plan apply secrets datos apply-eks kubeconfig destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
 
 help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-16s %s\n",$$1,$$2}'
@@ -54,6 +54,10 @@ apply: plan ## ⚠ Apply the saved plan (creates billable resources)
 	$(TF) -chdir=$(PRINCIPAL) apply -input=false principal.tfplan
 	@# The parameters exist now: API keys and Sentry DSNs from the Keychain (RUNBOOK 2.2). Never in CI.
 	@[[ -n "$${CI:-}" ]] || scripts/set-secrets.sh
+
+datos: check-creds ## Load data: make datos ENV=staging (demo + backfill) | ENV=prod (live backfill only, D-46), then models
+	@case "$(ENV)" in staging|prod) ;; *) echo "Set ENV=staging or ENV=prod"; exit 1;; esac
+	@scripts/cargar-datos.sh $(ENV)
 
 secrets: check-creds ## API keys and Sentry DSNs into SSM (Keychain, asks once), then sync and restart pods (ASK=1: ask again)
 	@scripts/set-secrets.sh

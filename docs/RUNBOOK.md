@@ -117,51 +117,35 @@ Grafana: `kubectl -n plataforma port-forward svc/kube-prometheus-stack-grafana 3
 
 ## 3. First data and models
 
-Each environment has its own database, so run this section once per environment. Set the environment, log in as the seeded admin and keep the token in a variable:
+Each environment has its own database, and `make destroy` wipes both. After every `make apply`, once Argo CD has synced the environment, load its data:
 
 ```bash
-ENV=staging                       # or prod
-H=https://staging.<ip>.nip.io     # prod: https://<ip>.nip.io
-read -rs PASS                     # /statline/$ENV/seed-admin-password (2.2)
-TOKEN=$(curl -s "$H/api/auth/login" -H 'content-type: application/json' \
-  -d "{\"email\":\"admin@statline.local\",\"password\":\"$PASS\"}" | jq -r .accessToken); unset PASS
+make datos ENV=staging    # demo data (D-42) + backfill of the current seasons + models
+make datos ENV=prod       # backfill of the current seasons only, live data (D-46) + models
 ```
 
-**Ingest.** The CronJobs run on their schedule (`0 8 * * *` NBA, `0 8 * * 2` NFL, `0 8 * * 1,5` Liga MX). To run one now:
+`scripts/cargar-datos.sh` does the whole section:
+
+1. **Demo data (staging only).** `ingesta seed-demo --confirmar`: synthetic games marked `demo`, enough for every model (backend D-29). Prod never gets it.
+2. **Backfill.** One Job per sport from its CronJob spec: `ingesta run <deporte> --desde <season start> --hasta <today+7>`.
+   - The season starts are in the script (`DESDE_BASQUETBOL`, `DESDE_AMERICANO` and `DESDE_FUTBOL` override them); `HASTA` overrides the end.
+   - On the free plans every run switches to the fallbacks (D-41), and the free-plan 429s are retried.
+   - Expect about 10 minutes, NFL and Liga MX one after the other.
+3. **Models.** It retrains the 6 models (3 sports × 2 types), then generates forecasts and projections. It calls predicciones from a curl pod with the smoke label, so no admin login is involved.
+   - A model is activated only if it beats its baseline (backend D-31). `activado: false` with a `motivo`, or "not enough data", is a valid answer.
+   - Prod has no box scores, so its projection models never train (D-46).
+4. **Summary.** Per sport: live and demo games, finished and scheduled, plus the active models. In prod it warns if any `demo-` game exists.
+
+The CronJobs then run on their schedule (`0 8 * * *` NBA, `0 8 * * 2` NFL, `0 8 * * 1,5` Liga MX) and keep both environments current. To run one now with the default range (yesterday and today):
 
 ```bash
 kubectl -n statline-$ENV create job ingesta-nba-$(date +%s) --from=cronjob/statline-$ENV-ingesta-basquetbol
 kubectl -n statline-$ENV logs -f job/<that job>
 ```
 
-Do this once per sport on the first deploy: the NFL, Liga MX and fallback mappings come from provider docs and have never seen a live response (backend D-24, D-25, D-27). A mapping error shows up as discarded lines or a failed `ejecucion_ingesta` row (`GET $H/api/ingestas`). Save the failing response as a fixture and fix the adapter.
+A mapping error shows up as discarded lines, or as a failed `ejecucion_ingesta` row (`GET /api/ingestas`). Save the failing response as a fixture and fix the adapter.
 
-**Train and generate.** Training needs finished games in the database. With real data:
-
-```bash
-for d in BASQUETBOL AMERICANO FUTBOL; do for t in RESULTADO_PARTIDO PROYECCION_JUGADOR; do
-  curl -s -X POST "$H/api/modelos/reentrenar" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-    -d "{\"deporte\":\"$d\",\"tipo\":\"$t\"}" | jq '{deporte, tipo, activado, motivo}'
-done; done
-for d in BASQUETBOL AMERICANO FUTBOL; do
-  curl -s -X POST "$H/api/pronosticos/generar"  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "{\"deporte\":\"$d\"}" | jq .generados
-  curl -s -X POST "$H/api/proyecciones/generar" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "{\"deporte\":\"$d\"}" | jq .generados
-done
-```
-
-A model is activated only if it beats its baseline (backend D-31): `activado: false` with a `motivo` is a valid answer. Training can outlast the api's 30 s proxy timeout (503) while predicciones still finishes; check `GET $H/api/modelos`.
-
-**With the free API-Sports plan** a run switches to the fallback providers (DECISIONS D-40, D-41): both environments get real games from balldontlie and TheSportsDB, with no NFL or Liga MX box scores. That is not enough to train every model, so use the demo data below for the models.
-
-**Without enough real games (both environments, D-42).** `ingesta seed-demo` writes synthetic games marked `demo` (backend D-29), enough for every model to activate; the frontend labels them as synthetic. Run it as a one-off Job from the NBA CronJob spec, which already has the database secret:
-
-```bash
-kubectl -n statline-$ENV create job demo-seed --from=cronjob/statline-$ENV-ingesta-basquetbol --dry-run=client -o json \
-  | jq '.spec.template.spec.containers[0].args = ["seed-demo","--confirmar"]' | kubectl apply -f -
-kubectl -n statline-$ENV logs -f job/demo-seed
-```
-
-Then train and generate as above. In prod, run it only while no real provider supplies player box scores (D-42).
+**From the app (ADMIN).** The same training and generation are available through the API, as `POST /api/modelos/reentrenar`, `/api/pronosticos/generar` and `/api/proyecciones/generar`, with an ADMIN token. The seeded admin is `admin@statline.local`, with the password in `/statline/$ENV/seed-admin-password`. Training can take longer than the api's 30 s proxy timeout (503) while predicciones still finishes; check `GET /api/modelos`.
 
 ## 4. Post-deploy smoke tests
 

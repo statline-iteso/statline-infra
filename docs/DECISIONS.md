@@ -49,10 +49,11 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-39 | 2026-11-22 | Staging uses the `letsencrypt-prod` ClusterIssuer too; `letsencrypt-staging` stays for testing issuance | Decided |
 | D-40 | 2026-11-23 | Staging ingests through the fallback providers (`fallbackHabilitado: "true"`): balldontlie for NBA, TheSportsDB for NFL and Liga MX. Prod stays off | Superseded in part by D-41 |
 | D-41 | 2026-11-23 | Prod also ingests through the fallback providers for v1.0.0 (`fallbackHabilitado: "true"`), with the reasoning of D-40 | Decided |
-| D-42 | 2026-11-23 | Prod gets the synthetic `seed-demo` data too, so its models can train while no provider supplies player box scores | Decided |
+| D-42 | 2026-11-23 | Prod gets the synthetic `seed-demo` data too, so its models can train while no provider supplies player box scores | Superseded for prod by D-46; still applies to staging |
 | D-43 | 2026-11-25 | Sentry (hosted, student plan) for api, predicciones, ingesta and web; DSNs in SSM, HTTPS egress for api and predicciones, web DSN through a runtime `config.js` | Decided |
 | D-44 | 2026-11-25 | Build once, promote: main and `vX.Y.Z` tags reuse the image develop built and staging ran (re-scanned with Trivy), instead of rebuilding; pushed images carry SBOM and provenance | Decided |
 | D-45 | 2026-11-25 | `auto-merge.yml` keeps approving Ian's PRs into `develop`: two-person team, CI is the reviewer there; `main` (every release and prod bump) needs a human approval | Decided |
+| D-46 | 2026-11-25 | Prod shows live data only: `make datos ENV=prod` backfills the current seasons through the free providers, never `seed-demo`; staging keeps demo data plus the same backfill | Decided |
 
 ## 2. Details
 
@@ -252,6 +253,24 @@ If it finds one, it re-scans it with Trivy against today's data and adds the new
 - **What still needs a person:** every PR into `main`, meaning each release and each prod tag bump (`gitops/bump-prod`). Prod never changes without Juan Pablo's or Ian's approval.
 - **Not automated:** Juan Pablo's PRs, Dependabot's PRs, and any PR touching `auto-merge.yml` itself, which runs from the base branch (`pull_request_target`).
 - **Hardening:** the workflow approves only the exact commit CI validated (`--match-head-commit`), checks out nothing from the PR, and accepts a staging bump PR only if it changes nothing but `values-staging.yaml`.
+
+
+### D-46 · Live data only in prod
+Supersedes D-42 for prod. Prod must show only real data, even if that means fewer models. Staging keeps the synthetic data (D-42), so every screen can still be shown there.
+- **Backfill:** the CronJobs only ingest yesterday and today, and every `make destroy` wipes the database. `scripts/cargar-datos.sh` (`make datos ENV=staging|prod`) runs `ingesta run <deporte> --desde <season start> --hasta <today+7>` as one-off Jobs from each CronJob spec. The daily CronJobs keep prod current after that.
+  - **Default season starts:** NBA 2026-10-20, NFL 2026-09-09, Liga MX 2026-07-16. They can be overridden with `DESDE_*`.
+  - **Scheduled games:** the 7 future days bring in upcoming games for the forecasts.
+- **Sources:**
+  - **API-Sports:** the free plan only serves yesterday to tomorrow, whatever the season, so every backfill run switches to the fallbacks (D-41).
+  - **balldontlie** (NBA): every game, no box scores.
+  - **TheSportsDB** (NFL, Liga MX): only a few games per day on the free key, no box scores.
+  - **Rate limits:** the existing retries absorb the 429s of both. NFL and Liga MX run one after the other, because they share TheSportsDB's limit.
+- **What prod can and can't show:**
+  - **Scores and standings:** real ones.
+  - **Match outcome models:** they train on scores (team form). Each needs at least 60 finished games per sport and must beat its baseline: NBA qualifies; NFL and Liga MX depend on how many games the free key returns.
+  - **Player projections:** none, because no free source has box scores. The frontend shows its empty states.
+- **Models:** `make datos` trains them and generates forecasts by calling predicciones inside the namespace, from a curl pod with the smoke label. It needs no admin login, so it keeps working if the login changes.
+- **Check:** the script ends with a summary per sport (live and demo games, finished and scheduled, active models). In prod it warns if any `demo-` game exists.
 
 ## 3. Known limitations
 

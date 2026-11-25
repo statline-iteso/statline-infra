@@ -15,7 +15,7 @@ Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** 
 ## Decisiones que faltan al desplegar prod
 
 - Respaldo en prod: decidido, activo como en staging (D-41).
-- Datos de demo en prod: decidido, `seed-demo` también en prod para que sus modelos entrenen (D-42; RUNBOOK §3 con `ENV=prod`).
+- Datos en prod: solo datos reales (D-46, reemplaza a D-42 para prod). Después de cada `make apply`, `make datos ENV=prod` carga la temporada actual de los proveedores de respaldo y entrena los modelos. Staging conserva los datos de demo (`make datos ENV=staging`).
 - `networkPolicies.kubeApiCidr` solo si se usa `api.ingestaLanzador: kubernetes`.
 
 ## Configuración en GitHub y AWS (lista)
