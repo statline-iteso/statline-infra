@@ -37,24 +37,24 @@ sentry:
 # Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
 web:
   image:
-    tag: "5dda0f1"
+    tag: "5339408"
 api:
   autoscaling:
     enabled: true
   image:
-    tag: "e4edc3e"
+    tag: "38049a4"
 predicciones:
   autoscaling:
     enabled: true
   image:
-    tag: "e4edc3e"
+    tag: "38049a4"
 ingesta:
   config:
     # On since D-40: the free API-Sports plan answers nothing, so the fallbacks are the only real data
     # and no game can arrive from two providers. Prod too since D-41.
     fallbackHabilitado: "true"
   image:
-    tag: "e4edc3e"
+    tag: "38049a4"
 
 monitoring:
   enabled: true
