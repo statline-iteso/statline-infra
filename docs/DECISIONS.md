@@ -50,6 +50,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-40 | 2026-11-23 | Staging ingests through the fallback providers (`fallbackHabilitado: "true"`): balldontlie for NBA, TheSportsDB for NFL and Liga MX. Prod stays off | Superseded in part by D-41 |
 | D-41 | 2026-11-23 | Prod also ingests through the fallback providers for v1.0.0 (`fallbackHabilitado: "true"`), with the reasoning of D-40 | Decided |
 | D-42 | 2026-11-23 | Prod gets the synthetic `seed-demo` data too, so its models can train while no provider supplies player box scores | Decided |
+| D-43 | 2026-11-25 | Sentry (hosted, student plan) for api, predicciones, ingesta and web; DSNs in SSM, HTTPS egress for api and predicciones, web DSN through a runtime `config.js` | Decided |
 
 ## 2. Details
 
@@ -225,6 +226,15 @@ For v1.0.0 (SL-61) prod gets the same setting as staging. With fallback off, eve
 
 ### D-42 · Demo data in prod
 The RUNBOOK kept `ingesta seed-demo` out of prod. But the free providers give games with no player box scores (backend D-39, D-40), so prod could train no model and its forecast and projection screens would be empty in the v1.0.0 demo. Prod now gets the same synthetic games as staging, next to the real fallback games. **Why it is acceptable:** the synthetic rows use provider `demo` and `demo-` ids (backend D-29), never collide with real games, and the frontend labels them as synthetic. **Revisit** when a paid provider supplies box scores: delete the `demo` rows and retrain on real data. **Rejected:** a prod demo on staging only (the release would ship a prod without forecasts).
+
+
+### D-43 · Sentry error monitoring
+Errors from the four services go to hosted Sentry (sentry.io, the GitHub Student Developer Pack plan), one project per service: `statline-api`, `statline-predicciones`, `statline-ingesta` and `statline-web`. The application side is backend D-40 and frontend D-07. **Rejected:** self-hosted Sentry, which needs more memory than the two t3.medium nodes have.
+- **DSNs:** SSM `/statline/comun/sentry-dsn-<service>`, created by Terraform with the `set-me` placeholder. The services treat anything that is not an `https://` URL as Sentry off, so a fresh environment runs before the DSNs are set. One DSN serves both environments: `SENTRY_ENVIRONMENT` (from `.Values.environment`) separates them in Sentry.
+- **Pods:** each service reads its own Secret key as `SENTRY_DSN`, optional (`secretKeyRef.optional`). `SENTRY_TRACES_SAMPLE_RATE` defaults to `"0"` (errors only, to stay inside the monthly quota). Each ingesta CronJob gets `SENTRY_MONITOR_SCHEDULE` (its schedule) for Sentry Crons.
+- **Network:** api and predicciones get HTTPS egress to public addresses (private ranges excluded, the same rule ingesta has) only when `sentry.enabled`. Sentry ingest has no fixed IP range to allow instead.
+- **web:** the browser calls Sentry directly. A second ExternalSecret, `<release>-web-config`, renders `config.js` from the web DSN with an External Secrets template (a non-https value renders as empty). `web.yaml` mounts it over the image's empty default.
+- **Off by default** in `values.yaml` and k3d; staging and prod set `sentry.enabled: true`.
 
 ## 3. Known limitations
 

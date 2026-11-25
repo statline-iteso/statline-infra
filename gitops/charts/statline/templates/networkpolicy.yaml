@@ -170,7 +170,8 @@ spec:
           port: {{ .Values.api.port }}
 ---
 # api egress: predicciones (forecasts), Redis in plataforma (cache), PostgreSQL (Prisma and
-# readiness), and the Kubernetes API only when ingestaLanzador is kubernetes (D-30).
+# readiness), HTTPS to the internet when Sentry is on (D-43), and the Kubernetes API only when
+# ingestaLanzador is kubernetes (D-30).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -191,6 +192,10 @@ spec:
           port: {{ .Values.predicciones.port }}
     {{- include "statline.netpol.redisEgress" . | nindent 4 }}
     {{- include "statline.netpol.dbEgress" . | nindent 4 }}
+    {{- if .Values.sentry.enabled }}
+    # Sentry ingest (D-43).
+    {{- include "statline.netpol.internetHttps" . | nindent 4 }}
+    {{- end }}
     {{- if eq $lanzador "kubernetes" }}
     # Kubernetes API for the on-demand ingestion Jobs (D-30). Address comes from values.
     - to:
@@ -317,6 +322,10 @@ spec:
     - Egress
   egress:
     {{- include "statline.netpol.dbEgress" . | nindent 4 }}
+    {{- if .Values.sentry.enabled }}
+    # Sentry ingest (D-43).
+    {{- include "statline.netpol.internetHttps" . | nindent 4 }}
+    {{- end }}
 ---
 # ingesta CronJobs: PostgreSQL, and HTTPS to the sports APIs on the internet. Private ranges are
 # excluded so the job cannot reach the VNet, other pods or node addresses. No ingress.
@@ -334,16 +343,7 @@ spec:
     - Egress
   egress:
     {{- include "statline.netpol.dbEgress" . | nindent 4 }}
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-            except:
-              - 10.0.0.0/8
-              - 172.16.0.0/12
-              - 192.168.0.0/16
-      ports:
-        - protocol: TCP
-          port: 443
+    {{- include "statline.netpol.internetHttps" . | nindent 4 }}
 {{- if .Values.devPostgres.enabled }}
 ---
 # k3d only: the dev Postgres accepts connections from the workloads that use it.

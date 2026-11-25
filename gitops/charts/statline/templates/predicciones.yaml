@@ -68,6 +68,7 @@ spec:
                 name: {{ $name }}
           env:
             {{- include "statline.secretEnv" (dict "keys" .Values.predicciones.secretKeys "secretName" .Values.secrets.name) | nindent 12 }}
+            {{- include "statline.sentryEnv" (dict "component" "predicciones" "ctx" $) | nindent 12 }}
           livenessProbe:
             httpGet:
               path: /healthz

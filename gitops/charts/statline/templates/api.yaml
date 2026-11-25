@@ -151,6 +151,7 @@ spec:
                 name: {{ $name }}
           env:
             {{- include "statline.secretEnv" (dict "keys" .Values.api.secretKeys "secretName" .Values.secrets.name) | nindent 12 }}
+            {{- include "statline.sentryEnv" (dict "component" "api" "ctx" $) | nindent 12 }}
           livenessProbe:
             httpGet:
               path: /healthz

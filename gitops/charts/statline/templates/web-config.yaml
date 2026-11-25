@@ -1,0 +1,33 @@
+{{- if and .Values.sentry.enabled (eq .Values.secrets.mode "external") }}
+# /config.js of the SPA (frontend D-07), rendered by External Secrets from SSM: the browser DSN of
+# Sentry and this environment. A DSN that is not an https URL (Terraform's "set-me" placeholder)
+# renders as empty, which keeps Sentry off in the browser. Mounted by web.yaml.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ printf "%s-web-config" .Release.Name }}
+  labels:
+    {{- include "statline.labels" (dict "component" "web" "ctx" . "version" "") | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  refreshInterval: {{ .Values.secrets.external.refreshInterval | quote }}
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: {{ .Values.secrets.external.storeName }}
+  target:
+    name: {{ printf "%s-web-config" .Release.Name }}
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        config.js: |
+          window.__STATLINE_CONFIG__ = {
+            sentryDsn: {{ `{{ if hasPrefix "https://" .dsn }}{{ .dsn | toJson }}{{ else }}""{{ end }}` }},
+            sentryEnvironment: {{ .Values.sentry.environment | default .Values.environment | toJson }},
+          };
+  data:
+    - secretKey: dsn
+      remoteRef:
+        key: {{ required "sentry.webDsnParameter is required" .Values.sentry.webDsnParameter | quote }}
+{{- end }}

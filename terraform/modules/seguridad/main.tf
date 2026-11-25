@@ -45,12 +45,16 @@ resource "aws_ssm_parameter" "ambiente" {
   value    = local.por_ambiente[each.key]
 }
 
-# Shared by both environments. "set-me" is harmless while FALLBACK_HABILITADO is false.
+# Shared by both environments. "set-me" is harmless: the API keys only matter to ingesta, and
+# the services treat a Sentry DSN that is not an https URL as no DSN (Sentry off, D-43).
 resource "aws_ssm_parameter" "comun" {
-  for_each = toset(["api-sports-key", "balldontlie-api-key"])
-  name     = "${var.prefix}/comun/${each.key}"
-  type     = "SecureString"
-  value    = "set-me"
+  for_each = toset([
+    "api-sports-key", "balldontlie-api-key",
+    "sentry-dsn-api", "sentry-dsn-predicciones", "sentry-dsn-ingesta", "sentry-dsn-web",
+  ])
+  name  = "${var.prefix}/comun/${each.key}"
+  type  = "SecureString"
+  value = "set-me"
 
   lifecycle {
     ignore_changes = [value]

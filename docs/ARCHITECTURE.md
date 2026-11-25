@@ -60,6 +60,7 @@ Names are fixed; the chart's ExternalSecret reads them by these names. `<env>` i
 | `/statline/<env>/seed-admin-password` | `SEED_ADMIN_PASSWORD`: password of the first ADMIN (`admin@statline.local`), read only by the api `seed` initContainer | `random_password` (32 chars) |
 | `/statline/comun/api-sports-key` | `API_SPORTS_KEY` (one quota for all envs) | placeholder `set-me`, set out of band (RUNBOOK 2.2); Terraform ignores later changes |
 | `/statline/comun/balldontlie-api-key` | `BALLDONTLIE_API_KEY` (ingesta NBA fallback) | placeholder `set-me`, set before enabling `FALLBACK_HABILITADO`; Terraform ignores later changes |
+| `/statline/comun/sentry-dsn-{api,predicciones,ingesta,web}` | `SENTRY_DSN_API`, `SENTRY_DSN_PREDICCIONES`, `SENTRY_DSN_INGESTA` (each service reads its key as `SENTRY_DSN`); the web one is rendered into `<release>-web-config` (`config.js`) | placeholder `set-me`, which every service treats as Sentry off; set the DSNs from Sentry (RUNBOOK 2.2); Terraform ignores later changes |
 
 The Kubernetes Secret `statline-secrets` maps these to the env names the images expect (§5).
 
@@ -120,7 +121,7 @@ Per workload, the env vars it reads from the Secret (`<component>.secretKeys`, s
 | predicciones | `DATABASE_URL` |
 | ingesta CronJobs | `DATABASE_URL`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY` (optional) |
 
-SSM parameter names (`secrets.external.parameters`): staging uses `/statline/staging/{database-url,jwt-secret,jwt-refresh-secret,seed-admin-password}`; prod the same with `prod`; `/statline/comun/api-sports-key` and `/statline/comun/balldontlie-api-key` are shared. The balldontlie parameter must exist even though the env var is optional: a missing parameter fails the sync. All names are configurable in values. Limit: one node role for every pod, so either namespace could read the other environment's parameters; the ClusterSecretStore admits only the two app namespaces.
+SSM parameter names (`secrets.external.parameters`): staging uses `/statline/staging/{database-url,jwt-secret,jwt-refresh-secret,seed-admin-password}`; prod the same with `prod`; `/statline/comun/api-sports-key`, `/statline/comun/balldontlie-api-key` and the four `/statline/comun/sentry-dsn-*` are shared (Sentry tells the environments apart by `SENTRY_ENVIRONMENT`). The balldontlie parameter must exist even though the env var is optional: a missing parameter fails the sync. All names are configurable in values. Limit: one node role for every pod, so either namespace could read the other environment's parameters; the ClusterSecretStore admits only the two app namespaces.
 
 ### 4.4 Redis
 
@@ -203,7 +204,8 @@ Every pod in a release namespace starts with `default-deny` (ingress and egress)
 | predicciones ← Prometheus | 8000 | `prometheus` | metrics |
 | predicciones → PostgreSQL | 5432 | `postgresCidr` | models and data |
 | ingesta → PostgreSQL | 5432 | `postgresCidr` | ingestion |
-| ingesta → internet | 443 | `0.0.0.0/0` except 10/8, 172.16/12, 192.168/16 | API-Sports, balldontlie, TheSportsDB |
+| ingesta → internet | 443 | `0.0.0.0/0` except 10/8, 172.16/12, 192.168/16 | API-Sports, balldontlie, TheSportsDB, Sentry |
+| api, predicciones → internet | 443 | same, only when `sentry.enabled` | Sentry ingest (D-43) |
 | api, predicciones, ingesta → dev Postgres | 5432 | pod labels (k3d only, `devPostgres.enabled`) | local database |
 | Redis ← api | 6379 | namespace label `statline.io/ambiente` AND `app.kubernetes.io/name: statline-api` (redis chart) | cache; egress from Redis is denied |
 
