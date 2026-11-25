@@ -2,14 +2,15 @@
 
 Entregable 6. **Juan Pablo** González (backend, frontend, cimientos) e **Ian** Rodríguez (infraestructura, predicciones, despliegue). Todo lo del [diagrama](solucion.png) está implementado; esta lista es lo que falta para la entrega. Cada punto tiene su issue en el [tablero](https://github.com/orgs/statline-iteso/projects) y en [BACKLOG.md](BACKLOG.md).
 
-**Avance:** 60 de 61 issues · 273 de 277 puntos (99 %). El código está completo y fusionado en `develop` de los tres repos. Como se negaron los créditos de Azure, la infraestructura se movió a AWS Learner Lab (EKS, RDS, SSM; DECISIONS D-38, issue #50, cerrado). Staging se desplegó y se verificó el 2026-11-22 y el 2026-11-23: CD automático de punta a punta, pruebas de humo, ingesta real por deporte, simulacro de rollback y `make destroy`. La evidencia está en [evidencia/](evidencia/README.md) (SL-60, cerrado). Costo del laboratorio hasta el 2026-11-23: USD 3.1 de 50.
+**Avance:** 60 de 61 issues · 273 de 277 puntos (99 %). El código está completo y fusionado en `develop` de los tres repos. Como se negaron los créditos de Azure, la infraestructura se movió a AWS Learner Lab (EKS, RDS, SSM; DECISIONS D-38, issue #50, cerrado). Staging se desplegó y se verificó el 2026-11-22 y el 2026-11-23: CD automático de punta a punta, pruebas de humo, ingesta real por deporte, simulacro de rollback y `make destroy`. El 2026-11-25 se desplegó prod con `v1.0.0` y se probó Sentry en staging. La evidencia está en [evidencia/](evidencia/README.md) (SL-60, cerrado). Costo del laboratorio hasta el 2026-11-23: USD 3.1 de 50.
 
 ## Lo que falta
 
 | # | Pendiente | Issue | Pts |
 |---|---|---|---|
-| 1 | Release `v1.0.0`: PRs `develop → main` en los tres repos (los revisa Juan Pablo), etiqueta y notas; despliegue de prod; presentación y demo de punta a punta | SL-61 | 4 |
-| 2 | Resumen de `make apply` para la evidencia de SL-60: se captura en la siguiente reconstrucción del ambiente | SL-60 | — |
+| 1 | Presentación y demo de punta a punta. El release `v1.0.0` ya está en `main` de los tres repos, con prod desplegado y verificado el 2026-11-25 | SL-61 | 4 |
+| 2 | Release `v1.1.0`: Sentry en prod (D-43) y el endurecimiento de CI/CD (D-44, D-45); PRs `develop → main` que revisa Juan Pablo | #83 | — |
+| 3 | Resumen de `make apply` para la evidencia de SL-60: se captura en la siguiente reconstrucción del ambiente | SL-60 | — |
 
 ## Decisiones que faltan al desplegar prod
 

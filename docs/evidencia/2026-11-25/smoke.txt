@@ -1,0 +1,10 @@
+# 2026-11-25T05:37:35Z · make smoke ENV=prod
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
+ok    http://statline-prod-web/healthz -> 200 (attempt 1)
+ok    http://statline-prod-api/healthz -> 200 (attempt 1)
+ok    http://statline-prod-api/readyz -> 200 (attempt 1)
+ok    http://statline-prod-predicciones/healthz -> 200 (attempt 1)
+ok    http://statline-prod-predicciones/readyz -> 200 (attempt 1)
+all smoke checks passed
+pod "statline-smoke" deleted from statline-prod namespace
