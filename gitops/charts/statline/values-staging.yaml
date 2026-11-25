@@ -25,6 +25,14 @@ secrets:
       API_SPORTS_KEY: /statline/comun/api-sports-key
       BALLDONTLIE_API_KEY: /statline/comun/balldontlie-api-key
       SEED_ADMIN_PASSWORD: /statline/staging/seed-admin-password
+      # Sentry DSNs, one project per service; the environment tags the events (D-43).
+      SENTRY_DSN_API: /statline/comun/sentry-dsn-api
+      SENTRY_DSN_PREDICCIONES: /statline/comun/sentry-dsn-predicciones
+      SENTRY_DSN_INGESTA: /statline/comun/sentry-dsn-ingesta
+
+sentry:
+  enabled: true
+  webDsnParameter: /statline/comun/sentry-dsn-web
 
 # Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
 web:

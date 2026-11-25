@@ -66,6 +66,12 @@ spec:
                     name: {{ $name }}
               env:
                 {{- include "statline.secretEnv" (dict "keys" $.Values.ingesta.secretKeys "optional" $.Values.ingesta.optionalSecretKeys "secretName" $.Values.secrets.name) | nindent 16 }}
+                {{- include "statline.sentryEnv" (dict "component" "ingesta" "ctx" $) | nindent 16 }}
+                {{- if $.Values.sentry.enabled }}
+                # Sentry Crons: the monitor ingesta-<job> is created with this schedule (backend D-40).
+                - name: SENTRY_MONITOR_SCHEDULE
+                  value: {{ .schedule | quote }}
+                {{- end }}
               resources:
                 {{- toYaml $.Values.ingesta.resources | nindent 16 }}
               securityContext:

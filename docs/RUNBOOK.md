@@ -58,6 +58,24 @@ read -rs KEY && aws ssm put-parameter --overwrite --type SecureString --name /st
 read -rs KEY && aws ssm put-parameter --overwrite --type SecureString --name /statline/comun/balldontlie-api-key --value "$KEY" >/dev/null; unset KEY   # optional
 ```
 
+**Sentry (D-43).** One DSN per Sentry project (Project settings → Client Keys). Until a parameter holds an `https://` DSN, that service runs with Sentry off:
+
+```bash
+for p in api predicciones ingesta web; do
+  echo "DSN of statline-$p:"; read -rs KEY
+  aws ssm put-parameter --overwrite --type SecureString --name /statline/comun/sentry-dsn-$p --value "$KEY" >/dev/null; unset KEY
+done
+```
+
+Source maps of the SPA are uploaded by the frontend's `cd.yml`. It needs, in `statline-frontend` settings: the secret `SENTRY_AUTH_TOKEN` (a Sentry organization token) and the variable `SENTRY_ORG` (the org slug; `SENTRY_PROJECT` defaults to `statline-web`):
+
+```bash
+gh secret set SENTRY_AUTH_TOKEN -R statline-iteso/statline-frontend     # paste the token when asked
+gh variable set SENTRY_ORG -R statline-iteso/statline-frontend --body <org-slug>
+```
+
+The pods read their DSN at start: after changing one, restart the Deployments once External Secrets has synced (`kubectl -n statline-$ENV rollout restart deploy`). The CronJobs pick it up on their next run.
+
 `--value` is visible in `ps` for the second the command runs; on a shared machine use `--cli-input-json file://…` from a file you delete afterwards. External Secrets picks the change up within the hour (section 6 has `force-sync`). The admin password for the app (`admin@statline.local`) is generated per environment (D-37):
 
 ```bash

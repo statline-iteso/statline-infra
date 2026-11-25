@@ -47,6 +47,22 @@ secrets:
     # Only read when secrets.mode is plain. Never put real values here.
     data: {}
 
+# Sentry error monitoring (D-43, backend D-40, frontend D-07). Each service reads its own DSN from
+# the statline Secret key below (map the keys in secrets.external.parameters); web gets it through
+# its /config.js (web-config.yaml). Off here and on k3d; the environment files turn it on.
+sentry:
+  enabled: false
+  # Defaults to .Values.environment.
+  environment: ""
+  # Share of requests traced, 0 to 1. 0: errors only (the plan's quota is per month).
+  tracesSampleRate: "0"
+  dsnKeys:
+    api: SENTRY_DSN_API
+    predicciones: SENTRY_DSN_PREDICCIONES
+    ingesta: SENTRY_DSN_INGESTA
+  # SSM parameter with the browser DSN (frontend project).
+  webDsnParameter: ""
+
 # Public entry point. Routes /api to the api Service and / to web.
 ingress:
   enabled: true
