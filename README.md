@@ -108,7 +108,7 @@ make bootstrap                    # once per lab account: S3 state bucket + ingr
 terraform -chdir=terraform/bootstrap output -raw ingress_ip   # hosts: staging.<ip>.nip.io and <ip>.nip.io
 make apply-eks                    # step 1: only the EKS cluster and nodes (~15 min; the kubernetes/helm providers need it)
 make plan                         # step 2: everything else (RDS, SSM, namespaces, platform charts, database Job)
-make apply                        # asks before applying
+make apply                        # asks before applying, then sets the API keys and Sentry DSNs (make secrets)
 make kubeconfig                   # context eks-statline
 terraform -chdir=terraform/principal output -raw grafana_admin_password   # Grafana, user admin
 ```

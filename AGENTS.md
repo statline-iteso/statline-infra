@@ -69,7 +69,8 @@ make check-creds           # are they still valid?
 make bootstrap             # once per lab account: S3 state bucket + ingress Elastic IP (local state) + backend.hcl
 make apply-eks             # ⚠ first apply only: the EKS cluster and nodes
 make plan                  # terraform plan for principal (saved to principal.tfplan)
-make apply                 # ⚠ applies the saved plan (asks for confirmation)
+make apply                 # ⚠ applies the saved plan (asks for confirmation), then runs make secrets
+make secrets               # API keys and Sentry DSNs into SSM from the Keychain (asks once); ASK=1 asks again
 make kubeconfig            # context eks-statline
 make destroy               # ⚠ destroys principal (asks; waits for the ingress NLB before the VPC)
 make output                # principal outputs
@@ -96,7 +97,7 @@ statline-infra/
 │       └── plataforma/      namespaces, five helm_release, database Job
 ├── gitops/                  Helm charts (statline, redis) + values per environment + Argo CD Applications
 ├── k3d/                     local cluster config
-├── scripts/                 lab-creds.sh · check-creds.sh · bootstrap-account.sh · backend-config.sh · esperar-nlb.sh · vaciar-gitops.sh · k3d-up.sh · bump-image-tags.sh · smoke.sh
+├── scripts/                 lab-creds.sh · check-creds.sh · bootstrap-account.sh · backend-config.sh · esperar-nlb.sh · vaciar-gitops.sh · set-secrets.sh · k3d-up.sh · bump-image-tags.sh · smoke.sh
 └── .github/workflows/       ci.yml · cd.yml (tag bump PRs) · auto-merge.yml
 ```
 
