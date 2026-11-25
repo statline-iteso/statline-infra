@@ -58,6 +58,7 @@ Rules for Terraform, Kubernetes manifests, scripts and workflows in this repo. I
 | `ci.yml` | push to `main`/`develop`, every PR | fmt, validate, tflint, shellcheck, helm lint, kubeconform; informational `plan` + PR comment with the lab keys (`AWS_*` secrets from `make creds`); Trivy IaC scan (`iac`), actionlint and zizmor (`workflows`), gitleaks (`secrets`) |
 | `cd.yml` *(SL-53)* | push to `develop`/`main`, `release/*` | receives the image tag from the app repos (`repository_dispatch`) and commits it to `gitops/values-<env>.yaml` |
 | `codeql.yml` | push to `main`/`develop`, every PR, weekly | CodeQL on the workflows (Actions) |
+| `release.yml` | `vX.Y.Z` tags | publishes the GitHub Release with generated notes, unless one was written by hand |
 
 - AWS access with the Learner Lab session keys only (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`), set by `make creds`. They expire with the session, so AWS steps skip with a notice instead of failing. The lab allows no OIDC provider.
 - `concurrency` group per workflow and ref.

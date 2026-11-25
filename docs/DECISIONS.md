@@ -51,6 +51,8 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-41 | 2026-11-23 | Prod also ingests through the fallback providers for v1.0.0 (`fallbackHabilitado: "true"`), with the reasoning of D-40 | Decided |
 | D-42 | 2026-11-23 | Prod gets the synthetic `seed-demo` data too, so its models can train while no provider supplies player box scores | Decided |
 | D-43 | 2026-11-25 | Sentry (hosted, student plan) for api, predicciones, ingesta and web; DSNs in SSM, HTTPS egress for api and predicciones, web DSN through a runtime `config.js` | Decided |
+| D-44 | 2026-11-25 | Build once, promote: main and `vX.Y.Z` tags reuse the image develop built and staging ran (re-scanned with Trivy), instead of rebuilding; pushed images carry SBOM and provenance | Decided |
+| D-45 | 2026-11-25 | `auto-merge.yml` keeps approving Ian's PRs into `develop`: two-person team, CI is the reviewer there; `main` (every release and prod bump) needs a human approval | Decided |
 
 ## 2. Details
 
@@ -235,6 +237,21 @@ Errors from the four services go to hosted Sentry (sentry.io, the GitHub Student
 - **Network:** api and predicciones get HTTPS egress to public addresses (private ranges excluded, the same rule ingesta has) only when `sentry.enabled`. Sentry ingest has no fixed IP range to allow instead.
 - **web:** the browser calls Sentry directly. A second ExternalSecret, `<release>-web-config`, renders `config.js` from the web DSN with an External Secrets template (a non-https value renders as empty). `web.yaml` mounts it over the image's empty default.
 - **Off by default** in `values.yaml` and k3d; staging and prod set `sentry.enabled: true`.
+
+
+### D-44 · Build once, promote
+Until v1.0.0, `cd.yml` in the app repos rebuilt every ref. The release merge into `main` produced new images (`api:6efb2c0`, `web:cf0a25d`) from the same code that staging had run as other images (`616a703`, `31ac3c3`). Prod then ran builds nobody had tested; base image layers or a dependency fetched at build time could differ. Now, on `main` and on `vX.Y.Z` tags, `cd.yml` looks for an existing image:
+- first the tagged commit's own image;
+- then the release merge's second parent, which is the release branch head, built on `develop`.
+
+If it finds one, it re-scans it with Trivy against today's data and adds the new tags to the same image index (`docker buildx imagetools create`; no rebuild, attestations kept). It builds only when no image exists, for example after a hotfix commit made on the release branch. Pushed images carry an SBOM and provenance (`mode=max`). Sentry's release is baked in as the build commit (backend D-40, frontend D-07), so it stays right after promotion. **Applies from v1.1.0:** tag workflows run from the tagged commit, and the v1.0.0 commit still has the old `cd.yml`.
+
+### D-45 · The bot approves Ian's PRs into develop
+`auto-merge.yml` (D-36) approves and squash-merges Ian's PRs into `develop` once the required CI passes. Those changes get no human review before staging.
+- **Why it stays:** a two-person team splits the work by area (AGENTS §1), and waiting for the other person blocked every staging deploy. On `develop` the reviewer is CI: lint, types, tests with a coverage gate, integration tests, image builds with Trivy, CodeQL, gitleaks, hadolint, actionlint and zizmor, and in infra `terraform validate`, tflint, kubeconform and Trivy IaC.
+- **What still needs a person:** every PR into `main`, meaning each release and each prod tag bump (`gitops/bump-prod`). Prod never changes without Juan Pablo's or Ian's approval.
+- **Not automated:** Juan Pablo's PRs, Dependabot's PRs, and any PR touching `auto-merge.yml` itself, which runs from the base branch (`pull_request_target`).
+- **Hardening:** the workflow approves only the exact commit CI validated (`--match-head-commit`), checks out nothing from the PR, and accepts a staging bump PR only if it changes nothing but `values-staging.yaml`.
 
 ## 3. Known limitations
 
