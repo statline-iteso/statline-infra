@@ -63,6 +63,21 @@ sentry:
   # SSM parameter with the browser DSN (frontend project).
   webDsnParameter: ""
 
+# Who authenticates the app's users (D-47). local: the api's own email + password login with JWTs
+# (k3d, compose, CI; the default). cognito: Amazon Cognito user pools (module identidad); the api
+# checks Cognito ID tokens and the SPA signs in against Cognito. The pool and client ids reach the
+# api from the Secret keys below (map them in secrets.external.parameters) and the SPA through its
+# /config.js (web-config.yaml).
+auth:
+  mode: local
+  cognito:
+    region: us-east-1
+    userPoolIdKey: COGNITO_USER_POOL_ID
+    clientIdKey: COGNITO_CLIENT_ID
+    # SSM parameters for the SPA's config.js.
+    userPoolIdParameter: ""
+    clientIdParameter: ""
+
 # Public entry point. Routes /api to the api Service and / to web.
 ingress:
   enabled: true

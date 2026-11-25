@@ -19,6 +19,10 @@ RATE_LIMIT_PER_MIN: {{ .Values.api.config.rateLimitPerMin | toString | quote }}
 RATE_LIMIT_LOGIN_PER_MIN: {{ .Values.api.config.rateLimitLoginPerMin | toString | quote }}
 INGESTA_LANZADOR: {{ .Values.api.ingestaLanzador | quote }}
 INGESTA_CRONJOB_PREFIJO: {{ printf "%s-" .Release.Name | quote }}
+AUTH_MODE: {{ include "statline.authMode" . | quote }}
+{{- if eq (include "statline.authMode" .) "cognito" }}
+COGNITO_REGION: {{ .Values.auth.cognito.region | quote }}
+{{- end }}
 {{- end -}}
 apiVersion: v1
 kind: ServiceAccount
@@ -131,6 +135,10 @@ spec:
               value: /tmp
             - name: SEED_ADMIN_EMAIL
               value: {{ .Values.api.seed.adminEmail | quote }}
+            # cognito: the seed creates the admin row with no password; the first Cognito login
+            # with that email links to it (D-47).
+            - name: AUTH_MODE
+              value: {{ include "statline.authMode" . | quote }}
             {{- include "statline.secretEnv" (dict "keys" .Values.api.seed.secretKeys "secretName" .Values.secrets.name) | nindent 12 }}
           resources:
             {{- toYaml .Values.api.migrations.resources | nindent 12 }}
@@ -152,6 +160,7 @@ spec:
           env:
             {{- include "statline.secretEnv" (dict "keys" .Values.api.secretKeys "secretName" .Values.secrets.name) | nindent 12 }}
             {{- include "statline.sentryEnv" (dict "component" "api" "ctx" $) | nindent 12 }}
+            {{- include "statline.cognitoEnv" $ | nindent 12 }}
           livenessProbe:
             httpGet:
               path: /healthz

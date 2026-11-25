@@ -27,7 +27,7 @@ ITESO final project, Fall 2026: **Juan Pablo González** (backend, frontend, fou
 ## 3. Scope
 
 In scope (proposal §1.2, moved from Azure to AWS by D-38):
-- on the AWS Learner Lab: one VPC, EKS, RDS PostgreSQL, SSM Parameter Store, CloudWatch logs, an Elastic IP for the ingress (hosts on nip.io)
+- on the AWS Learner Lab: one VPC, EKS, RDS PostgreSQL, SSM Parameter Store, Cognito user pools (D-47), CloudWatch logs, an Elastic IP for the ingress (hosts on nip.io)
 - one EKS cluster with namespaces `plataforma`, `statline-staging`, `statline-prod`
 - platform charts: ingress-nginx, cert-manager, Argo CD, kube-prometheus-stack, External Secrets; Redis as our own chart
 - per environment: Deployments `web` (2 replicas), `api`, `predicciones`; CronJobs `ingesta-basquetbol`, `ingesta-americano`, `ingesta-futbol`; HPA for api and predicciones; NetworkPolicies; PDBs; ExternalSecret
@@ -71,7 +71,7 @@ make apply-eks             # ⚠ first apply only: the EKS cluster and nodes
 make plan                  # terraform plan for principal (saved to principal.tfplan)
 make apply                 # ⚠ applies the saved plan (asks for confirmation), then runs make secrets
 make datos ENV=prod        # after Argo CD syncs: backfill live data (+ demo data in staging), then models
-make secrets               # API keys and Sentry DSNs into SSM from the Keychain (asks once); ASK=1 asks again
+make secrets               # API keys and Sentry DSNs into SSM, Cognito admin password, from the Keychain (asks once); ASK=1 asks again
 make kubeconfig            # context eks-statline
 make destroy               # ⚠ destroys principal (asks; waits for the ingress NLB before the VPC)
 make output                # principal outputs
@@ -94,6 +94,7 @@ statline-infra/
 │       ├── eks/             cluster, node group, addons (LabRole)
 │       ├── datos/           RDS PostgreSQL
 │       ├── seguridad/       SSM parameters
+│       ├── identidad/       Cognito user pools (D-47, behind cognito_enabled)
 │       ├── observabilidad/  CloudWatch log groups
 │       └── plataforma/      namespaces, five helm_release, database Job
 ├── gitops/                  Helm charts (statline, redis) + values per environment + Argo CD Applications

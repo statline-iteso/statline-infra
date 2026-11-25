@@ -1,7 +1,10 @@
-{{- if and .Values.sentry.enabled (eq .Values.secrets.mode "external") }}
-# /config.js of the SPA (frontend D-07), rendered by External Secrets from SSM: the browser DSN of
-# Sentry and this environment. A DSN that is not an https URL (Terraform's "set-me" placeholder)
-# renders as empty, which keeps Sentry off in the browser. Mounted by web.yaml.
+{{- if include "statline.webConfig.enabled" . }}
+{{- $sentry := .Values.sentry.enabled }}
+{{- $cognito := eq (include "statline.authMode" .) "cognito" }}
+# /config.js of the SPA, rendered by External Secrets from SSM and mounted by web.yaml:
+#   Sentry (frontend D-07): the browser DSN and this environment. A DSN that is not an https URL
+#     (Terraform's "set-me" placeholder) renders as empty, which keeps Sentry off in the browser.
+#   Cognito (D-47): the user pool and SPA client ids, which change with every make apply.
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
@@ -23,11 +26,28 @@ spec:
       data:
         config.js: |
           window.__STATLINE_CONFIG__ = {
+          {{- if $sentry }}
             sentryDsn: {{ `{{ if hasPrefix "https://" .dsn }}{{ .dsn | toJson }}{{ else }}""{{ end }}` }},
             sentryEnvironment: {{ .Values.sentry.environment | default .Values.environment | toJson }},
+          {{- end }}
+          {{- if $cognito }}
+            cognitoRegion: {{ .Values.auth.cognito.region | toJson }},
+            cognitoUserPoolId: {{ `{{ .userPoolId | toJson }}` }},
+            cognitoClientId: {{ `{{ .clientId | toJson }}` }},
+          {{- end }}
           };
   data:
+    {{- if $sentry }}
     - secretKey: dsn
       remoteRef:
         key: {{ required "sentry.webDsnParameter is required" .Values.sentry.webDsnParameter | quote }}
+    {{- end }}
+    {{- if $cognito }}
+    - secretKey: userPoolId
+      remoteRef:
+        key: {{ required "auth.cognito.userPoolIdParameter is required" .Values.auth.cognito.userPoolIdParameter | quote }}
+    - secretKey: clientId
+      remoteRef:
+        key: {{ required "auth.cognito.clientIdParameter is required" .Values.auth.cognito.clientIdParameter | quote }}
+    {{- end }}
 {{- end }}

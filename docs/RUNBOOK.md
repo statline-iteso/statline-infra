@@ -58,6 +58,7 @@ Terraform creates every SSM parameter, with the `set-me` placeholder for the val
 | `/statline/comun/api-sports-key` | api-sports.io dashboard |
 | `/statline/comun/balldontlie-api-key` | balldontlie.io (optional: Enter skips it) |
 | `/statline/comun/sentry-dsn-{api,predicciones,ingesta,web}` | Sentry → Settings → Projects → `statline-<service>` → Client Keys (DSN); must start with `https://` (D-43) |
+| Cognito admin password (not SSM) | only when the pools exist (`cognito_enabled`, D-47): Keychain `statline/admin-password`, asked once (6+ characters); set as permanent for `admin@statline.local` in both pools |
 
 `scripts/set-secrets.sh` reads each value from the macOS login Keychain (service `statline/<name>`). The first time, it asks for the missing ones (hidden input) and saves them there, so later sessions need no typing. Without the Keychain (Linux) it asks every run. `make secrets ASK=1` asks again and replaces the saved values, for example after rotating a key. It only writes parameters whose value changed, then, if the cluster is up, forces External Secrets to sync and restarts the Deployments of `statline-staging` and `statline-prod` (the CronJobs read the new Secret on their next run). A service whose DSN is still `set-me` runs with Sentry off.
 
@@ -76,7 +77,7 @@ gh secret set SENTRY_AUTH_TOKEN -R statline-iteso/statline-frontend     # paste 
 gh variable set SENTRY_ORG -R statline-iteso/statline-frontend --body statline-iteso
 ```
 
-`--value` (and the Keychain write) is visible in `ps` for the moment the command runs; fine on a personal laptop, not on a shared machine. Without the script, External Secrets picks a change up within the hour; to force it: `kubectl -n statline-$ENV annotate externalsecret --all force-sync=$(date +%s) --overwrite`. The admin password for the app (`admin@statline.local`) is generated per environment (D-37):
+`--value` (and the Keychain write) is visible in `ps` for the moment the command runs; fine on a personal laptop, not on a shared machine. Without the script, External Secrets picks a change up within the hour; to force it: `kubectl -n statline-$ENV annotate externalsecret --all force-sync=$(date +%s) --overwrite`. With `auth.mode: local` (the default) the admin password for the app (`admin@statline.local`) is generated per environment (D-37); with `auth.mode: cognito` it is the Keychain one above:
 
 ```bash
 aws ssm get-parameter --with-decryption --name /statline/staging/seed-admin-password --query Parameter.Value --output text

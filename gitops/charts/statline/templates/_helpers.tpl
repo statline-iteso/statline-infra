@@ -144,3 +144,54 @@ VPC, other pods or node addresses. ingesta (sports APIs) and, with Sentry on, ap
     - protocol: TCP
       port: 443
 {{- end -}}
+
+{{/*
+auth.mode, validated: local or cognito (D-47).
+*/}}
+{{- define "statline.authMode" -}}
+{{- $m := .Values.auth.mode -}}
+{{- if not (has $m (list "local" "cognito")) -}}
+{{- fail (printf "auth.mode must be local or cognito, got %q" $m) -}}
+{{- end -}}
+{{- $m -}}
+{{- end -}}
+
+{{/*
+Cognito ids for the api from the statline Secret (optional: a missing key fails the api's own
+config check, with a clear message, rather than blocking the pod). Nothing in local mode.
+*/}}
+{{- define "statline.cognitoEnv" -}}
+{{- if eq (include "statline.authMode" .) "cognito" }}
+- name: COGNITO_USER_POOL_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.secrets.name }}
+      key: {{ .Values.auth.cognito.userPoolIdKey }}
+      optional: true
+- name: COGNITO_CLIENT_ID
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.secrets.name }}
+      key: {{ .Values.auth.cognito.clientIdKey }}
+      optional: true
+{{- end }}
+{{- end -}}
+
+{{/*
+"true" when the SPA gets a runtime /config.js from External Secrets: Sentry's browser DSN (D-43)
+and/or the Cognito pool (D-47). k3d (secrets.mode plain) keeps the image's empty default.
+*/}}
+{{- define "statline.webConfig.enabled" -}}
+{{- if and (eq .Values.secrets.mode "external") (or .Values.sentry.enabled (eq (include "statline.authMode" .) "cognito")) -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
+api egress to public HTTPS: Sentry ingest (D-43) and Cognito's signing keys (D-47).
+*/}}
+{{- define "statline.api.internetHttps" -}}
+{{- if or .Values.sentry.enabled (eq (include "statline.authMode" .) "cognito") -}}
+true
+{{- end -}}
+{{- end -}}

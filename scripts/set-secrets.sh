@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Sets the SSM parameters Terraform cannot know: the API keys and the Sentry DSNs (D-43). Terraform
+# Sets the SSM parameters Terraform cannot know: the API keys and the Sentry DSNs (D-43), and the
+# password of the Cognito admin when the pools exist (D-47). Terraform
 # creates them with the `set-me` placeholder and `make destroy` deletes them, so every lab session
 # needs them again. `make apply` runs this at the end; `make secrets` runs it alone.
 #
@@ -87,6 +88,46 @@ for entry in "${params[@]}"; do
   changed=$((changed + 1))
 done
 unset value current
+
+# Cognito admin (D-47): Terraform creates admin@statline.local in each pool with no password; this
+# sets it, permanent, from the Keychain (statline/admin-password). Nothing to do without the pools
+# (cognito_enabled false). No pod restart needed: Cognito checks it at sign-in.
+admin_email=${ADMIN_EMAIL:-admin@statline.local}
+pools=()
+for env in staging prod; do
+  if pool=$(aws ssm get-parameter --region "$region" --name "/statline/$env/cognito-user-pool-id"     --query Parameter.Value --output text 2>/dev/null); then
+    pools+=("$env:$pool")
+  fi
+done
+if ((${#pools[@]} > 0)); then
+  pw=""
+  if $have_keychain && [[ "${ASK:-}" != 1 ]]; then pw=$(keychain_get admin-password || true); fi
+  if [[ -z "$pw" ]] && $interactive; then
+    read -rsp "Password of the Cognito admin $admin_email (6+ characters): " pw </dev/tty
+    echo >&2
+    if ((${#pw} < 6)); then
+      echo "skip  admin-password: Cognito needs at least 6 characters" >&2
+      pw=""
+    elif $have_keychain; then
+      keychain_put admin-password "$pw"
+      echo "saved admin-password in the Keychain (statline/admin-password)" >&2
+    fi
+  fi
+  if [[ -z "$pw" ]]; then
+    echo "skip  admin-password: not in the Keychain and not entered" >&2
+  else
+    for entry in "${pools[@]}"; do
+      env=${entry%%:*}
+      # --password is visible in ps for the moment the command runs, as with put-parameter above.
+      if aws cognito-idp admin-set-user-password --region "$region" --user-pool-id "${entry#*:}"         --username "$admin_email" --password "$pw" --permanent >/dev/null; then
+        echo "set   admin password in the $env pool" >&2
+      else
+        echo "warning: could not set the admin password in the $env pool" >&2
+      fi
+    done
+  fi
+  unset pw
+fi
 
 if ((changed == 0)); then
   echo "Nothing changed in SSM." >&2
