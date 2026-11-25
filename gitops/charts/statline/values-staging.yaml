@@ -37,7 +37,7 @@ sentry:
 # Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
 web:
   image:
-    tag: "5339408"
+    tag: "0f97436"
 api:
   autoscaling:
     enabled: true
