@@ -192,8 +192,8 @@ spec:
           port: {{ .Values.predicciones.port }}
     {{- include "statline.netpol.redisEgress" . | nindent 4 }}
     {{- include "statline.netpol.dbEgress" . | nindent 4 }}
-    {{- if .Values.sentry.enabled }}
-    # Sentry ingest (D-43).
+    {{- if include "statline.api.internetHttps" . }}
+    # Sentry ingest (D-43) and Cognito's public signing keys (D-47).
     {{- include "statline.netpol.internetHttps" . | nindent 4 }}
     {{- end }}
     {{- if eq $lanzador "kubernetes" }}

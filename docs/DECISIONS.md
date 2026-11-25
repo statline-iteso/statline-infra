@@ -54,6 +54,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-44 | 2026-11-25 | Build once, promote: main and `vX.Y.Z` tags reuse the image develop built and staging ran (re-scanned with Trivy), instead of rebuilding; pushed images carry SBOM and provenance | Decided |
 | D-45 | 2026-11-25 | `auto-merge.yml` keeps approving Ian's PRs into `develop`: two-person team, CI is the reviewer there; `main` (every release and prod bump) needs a human approval | Decided |
 | D-46 | 2026-11-25 | Prod shows live data only: `make datos ENV=prod` backfills the current seasons through the free providers, never `seed-demo`; staging keeps demo data plus the same backfill | Decided |
+| D-47 | 2026-11-25 | Amazon Cognito authenticates the app's users (module `identidad`, one pool per environment, behind `cognito_enabled`); roles stay in PostgreSQL; the chart's `auth.mode` switches the api and the SPA from `local` to `cognito` (v1.2.0) | Decided |
 
 ## 2. Details
 
@@ -271,6 +272,15 @@ Supersedes D-42 for prod. Prod must show only real data, even if that means fewe
   - **Player projections:** none, because no free source has box scores. The frontend shows its empty states.
 - **Models:** `make datos` trains them and generates forecasts by calling predicciones inside the namespace, from a curl pod with the smoke label. It needs no admin login, so it keeps working if the login changes.
 - **Check:** the script ends with a summary per sport (live and demo games, finished and scheduled, active models). In prod it warns if any `demo-` game exists.
+
+### D-47 · Cognito for the app's users
+A new AWS service, approved by the team (AGENTS rule 1). Users sign up with their email, confirm it with an emailed code and reset their own password; until now the api kept the passwords and only an ADMIN could see who existed.
+- **Split of work:** Cognito authenticates; PostgreSQL keeps the `Usuario` rows and their roles. The api checks Cognito **ID tokens** against the pool's public keys (`aws-jwt-verify`) and links or creates the `Usuario` row on the first request (by `cognito_sub`, else by email). It never calls Cognito's admin API, so no pod needs IAM permissions, which the lab cannot create (D-38).
+- **Infra:** `terraform/modules/identidad`, one user pool per environment (`statline-staging`, `statline-prod`), email as username, Cognito's own email sender (about 50 emails a day, free), a public SPA client with SRP and refresh only. Pool and client ids go to SSM (`/statline/<env>/cognito-{user-pool-id,client-id}`) because they change on every apply after a destroy; External Secrets hands them to the api (Secret) and the SPA (`config.js`).
+- **Admin:** Terraform creates `admin@statline.local` in each pool with no password. `make secrets` sets a permanent one from the Keychain (`statline/admin-password`), so it never lands in the repo or the state. The password policy is length 6 with no character classes, so the demo password can be short (team decision; Cognito's minimum is 6).
+- **Rollout behind two switches:** `cognito_enabled` (Terraform, default `false`) creates the pools; `auth.mode` (chart, default `local`) switches the api and the SPA. Both stay off until the v1.2.0 images support Cognito and a lab session confirms the lab allows creating pools. `local` stays for k3d, compose and CI.
+- **Egress:** in `cognito` mode the api gets HTTPS egress to the internet (the same rule as Sentry) to fetch the pool's signing keys.
+- **Limits:** every `make destroy` deletes the pools and so every user; the verification emails may land in spam; a short admin password is guessable while the lab is up; deleting a `Usuario` row does not delete the Cognito account, which comes back as USUARIO on its next login.
 
 ## 3. Known limitations
 

@@ -20,7 +20,7 @@ output "ssm_prefix" {
 
 output "ssm_parameters" {
   description = "Every SSM parameter Terraform manages."
-  value       = module.seguridad.parameter_names
+  value       = concat(module.seguridad.parameter_names, flatten(module.identidad[*].parameter_names))
 }
 
 output "postgres_address" {
@@ -42,4 +42,13 @@ output "grafana_admin_password" {
   description = "Grafana admin password (user admin). Read with: terraform output -raw grafana_admin_password. Not written to any file."
   value       = module.plataforma.grafana_admin_password
   sensitive   = true
+}
+
+output "cognito" {
+  description = "Cognito user pool and SPA client per environment, and the admin's username (D-47); null when cognito_enabled is false."
+  value = var.cognito_enabled ? {
+    user_pool_ids = module.identidad[0].user_pool_ids
+    client_ids    = module.identidad[0].client_ids
+    admin_email   = module.identidad[0].admin_email
+  } : null
 }

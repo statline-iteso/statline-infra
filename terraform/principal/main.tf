@@ -89,6 +89,15 @@ module "seguridad" {
   database_urls = module.datos.database_urls
 }
 
+# Cognito user pools for the app's users (D-47). Off by default until the lab is confirmed to allow
+# Cognito: make apply TF_VAR_cognito_enabled=true (or cognito_enabled in terraform.tfvars).
+module "identidad" {
+  count  = var.cognito_enabled ? 1 : 0
+  source = "../modules/identidad"
+  name   = local.name
+  prefix = "/${local.name}"
+}
+
 module "plataforma" {
   source = "../modules/plataforma"
 

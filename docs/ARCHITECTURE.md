@@ -43,10 +43,11 @@ Both bootstrap resources outlive `make destroy` of principal: the state must, an
 | `eks` | `statline` cluster, EKS 1.35, `upgrade_policy = STANDARD` (never extended support), public and private endpoint, access entries with the creator as admin, control-plane logs api, controllerManager, scheduler · managed node group 2 × t3.medium (fixed; max 3 by hand) in the public subnet, AL2023, `maxPods: 110`, IMDS hop limit 2 · addons vpc-cni (network policies, prefix delegation), kube-proxy, coredns, metrics-server · cluster and node role: `LabRole` |
 | `datos` | `statline-pg` RDS PostgreSQL 16, db.t3.micro, 20 GB gp3 encrypted, private, 1-day backups, no final snapshot, no deletion protection, logs to CloudWatch · security group: 5432 from the cluster security group only · master password from `random_password` |
 | `seguridad` | SSM SecureStrings (default `aws/ssm` key) below · `random_password` for the JWT secrets and the seed admin |
+| `identidad` | only with `cognito_enabled` (D-47): Cognito user pools `statline-staging` and `statline-prod` (email username, emailed code, password length ≥ 6, Cognito email sender) · public SPA client `statline-<env>-web` (SRP, refresh; ID and access tokens 60 min, refresh 7 days) · user `admin@statline.local` (no password; `make secrets` sets it) · SSM Strings with the pool and client ids |
 | `observabilidad` | CloudWatch log groups `/aws/eks/statline/cluster` and `/aws/rds/instance/statline-pg/postgresql`, 3-day retention, created before the services that write them |
 | `plataforma` | `kubernetes_namespace` ×3 (label `statline.io/ambiente`) · `random_password` Grafana · `helm_release`: ingress-nginx 4.15.1 (NLB with `aws-load-balancer-eip-allocations`), cert-manager v1.21.3, argo-cd 10.11.6, kube-prometheus-stack 92.16.0, external-secrets 2.14.0, all in `plataforma` · Job `crear-bases-<hash>` that creates `statline_staging` and `statline_prod` (D-16). Redis is a StatefulSet in the GitOps chart (D-20) |
 
-Outputs other repos or the chart rely on: `region`, `cluster_name`, `ingress_ip`, `ssm_prefix`, `ssm_parameters`, `postgres_address`, `postgres_private_cidrs` (`networkPolicies.postgresCidr`), `log_groups`, `grafana_admin_password` (sensitive). Bootstrap: `account_id`, `state_bucket`, `region`, `ingress_eip_allocation_id`, `ingress_ip`. Renaming one is a contract change.
+Outputs other repos or the chart rely on: `region`, `cluster_name`, `ingress_ip`, `ssm_prefix`, `ssm_parameters`, `postgres_address`, `postgres_private_cidrs` (`networkPolicies.postgresCidr`), `log_groups`, `grafana_admin_password` (sensitive), `cognito` (pool and client ids per environment, admin email; null when `cognito_enabled` is false). Bootstrap: `account_id`, `state_bucket`, `region`, `ingress_eip_allocation_id`, `ingress_ip`. Renaming one is a contract change.
 
 ### SSM parameters (contract)
 
@@ -62,7 +63,9 @@ Names are fixed; the chart's ExternalSecret reads them by these names. `<env>` i
 | `/statline/comun/balldontlie-api-key` | `BALLDONTLIE_API_KEY` (ingesta NBA fallback) | placeholder `set-me`, set before enabling `FALLBACK_HABILITADO`; Terraform ignores later changes |
 | `/statline/comun/sentry-dsn-{api,predicciones,ingesta,web}` | `SENTRY_DSN_API`, `SENTRY_DSN_PREDICCIONES`, `SENTRY_DSN_INGESTA` (each service reads its key as `SENTRY_DSN`); the web one is rendered into `<release>-web-config` (`config.js`) | placeholder `set-me`, which every service treats as Sentry off; set the DSNs from Sentry (RUNBOOK 2.2); Terraform ignores later changes |
 
-The Kubernetes Secret `statline-secrets` maps these to the env names the images expect (§5).
+| `/statline/<env>/cognito-user-pool-id`, `/statline/<env>/cognito-client-id` | `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` for the api; also rendered into `<release>-web-config` (`config.js`) | `module.identidad`, only with `cognito_enabled` (String, not secret; they change per apply) |
+
+The Kubernetes Secret `statline-secrets` maps these to the env names the images expect (§5). The admin's Cognito password is not in SSM: `make secrets` sets it straight in each pool from the Keychain (D-47).
 
 ### Why private access for PostgreSQL
 
@@ -116,7 +119,7 @@ Per workload, the env vars it reads from the Secret (`<component>.secretKeys`, s
 
 | Workload | Secret keys |
 |---|---|
-| api (and its migrate initContainer) | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` |
+| api (and its migrate initContainer) | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`; with `auth.mode: cognito` also `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` (api container only, optional keys added by the chart from `auth.cognito.*Parameter`) |
 | api `seed` initContainer | `DATABASE_URL`, `SEED_ADMIN_PASSWORD` (`api.seed.secretKeys`; the api container never gets it) |
 | predicciones | `DATABASE_URL` |
 | ingesta CronJobs | `DATABASE_URL`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY` (optional) |
@@ -176,10 +179,10 @@ Source of truth: backend `docs/ARCHITECTURE.md §8`. Summary:
 
 | Image | Port | Probes | Env (ConfigMap) | Env (Secret) |
 |---|---|---|---|---|
-| `statline/api` | 3000 | `/healthz`, `/readyz` | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL`, `CACHE_TTL_S` (60), `RATE_LIMIT_PER_MIN` (300), `RATE_LIMIT_LOGIN_PER_MIN` (10), `INGESTA_LANZADOR` (`deshabilitado`), `INGESTA_CRONJOB_PREFIJO` (`<release>-`, set by the chart) | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET` |
+| `statline/api` | 3000 | `/healthz`, `/readyz` | `PORT`, `PREDICCIONES_URL`, `REDIS_URL`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL`, `CACHE_TTL_S` (60), `RATE_LIMIT_PER_MIN` (300), `RATE_LIMIT_LOGIN_PER_MIN` (10), `INGESTA_LANZADOR` (`deshabilitado`), `INGESTA_CRONJOB_PREFIJO` (`<release>-`, set by the chart), `AUTH_MODE` (`local`\|`cognito`, D-47), `COGNITO_REGION` (cognito only) | `DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` (cognito only) |
 | `statline/predicciones` | 8000 | `/healthz`, `/readyz` | `ARTEFACTOS_DIR`, `LOG_LEVEL` | `DATABASE_URL` |
 | `statline/ingesta` | 8080 (`serve`) | `/healthz`, `/readyz` | `TEMPORADA_BASQUETBOL`, `TEMPORADA_AMERICANO`, `TEMPORADA_FUTBOL`, `API_SPORTS_DAILY_QUOTA`, `THESPORTSDB_API_KEY` (123), `FALLBACK_HABILITADO` (`false`) | `DATABASE_URL`, `API_SPORTS_KEY`, `BALLDONTLIE_API_KEY` (optional) |
-| `statline/web` | 8080 | `/healthz` | — | — |
+| `statline/web` | 8080 | `/healthz` | — | — (runtime `/config.js` from `<release>-web-config`: `sentryDsn`, `sentryEnvironment` with Sentry; `cognitoRegion`, `cognitoUserPoolId`, `cognitoClientId` with `auth.mode: cognito`) |
 
 `/readyz` of the api also checks Redis when `REDIS_URL` is set. The api trusts one proxy hop (ingress-nginx, `trust proxy` = 1). With `api.ingestaLanzador: kubernetes` the chart mounts the ServiceAccount token and renders a Role (`get` on `cronjobs`, `create` on `jobs`, group `batch`) and RoleBinding in the release namespace; otherwise none of that is rendered (D-30).
 
@@ -205,7 +208,7 @@ Every pod in a release namespace starts with `default-deny` (ingress and egress)
 | predicciones → PostgreSQL | 5432 | `postgresCidr` | models and data |
 | ingesta → PostgreSQL | 5432 | `postgresCidr` | ingestion |
 | ingesta → internet | 443 | `0.0.0.0/0` except 10/8, 172.16/12, 192.168/16 | API-Sports, balldontlie, TheSportsDB, Sentry |
-| api, predicciones → internet | 443 | same, only when `sentry.enabled` | Sentry ingest (D-43) |
+| api, predicciones → internet | 443 | same, only when `sentry.enabled`; the api also when `auth.mode: cognito` | Sentry ingest (D-43); Cognito's signing keys (D-47) |
 | api, predicciones, ingesta → dev Postgres | 5432 | pod labels (k3d only, `devPostgres.enabled`) | local database |
 | Redis ← api | 6379 | namespace label `statline.io/ambiente` AND `app.kubernetes.io/name: statline-api` (redis chart) | cache; egress from Redis is denied |
 

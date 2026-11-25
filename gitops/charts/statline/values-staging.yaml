@@ -34,6 +34,14 @@ sentry:
   enabled: true
   webDsnParameter: /statline/comun/sentry-dsn-web
 
+# Cognito (D-47): switch to cognito once Terraform created the pools (cognito_enabled) and the api
+# and web images support it (v1.2.0).
+auth:
+  mode: local
+  cognito:
+    userPoolIdParameter: /statline/staging/cognito-user-pool-id
+    clientIdParameter: /statline/staging/cognito-client-id
+
 # Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
 web:
   image:
