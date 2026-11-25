@@ -41,19 +41,19 @@ api:
   autoscaling:
     enabled: true
   image:
-    tag: "6efb2c0"
+    tag: "9e7c13f"
 predicciones:
   autoscaling:
     enabled: true
   image:
-    tag: "6efb2c0"
+    tag: "9e7c13f"
 ingesta:
   config:
     # On since D-41, as in staging (D-40): the free API-Sports plan answers nothing, so the
     # fallbacks are the only real data. Turn it off before using a paid API-Sports key.
     fallbackHabilitado: "true"
   image:
-    tag: "6efb2c0"
+    tag: "9e7c13f"
 
 monitoring:
   enabled: true
