@@ -62,11 +62,24 @@ spec:
               mountPath: /tmp
             - name: nginx-cache
               mountPath: /var/cache/nginx
+            {{- if .Values.sentry.enabled }}
+            # Runtime config with the Sentry DSN and environment (frontend D-07), over the image's
+            # empty default. subPath: a change applies on the next pod start.
+            - name: web-config
+              mountPath: /usr/share/nginx/html/config.js
+              subPath: config.js
+              readOnly: true
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: {}
         - name: nginx-cache
           emptyDir: {}
+        {{- if .Values.sentry.enabled }}
+        - name: web-config
+          secret:
+            secretName: {{ printf "%s-web-config" .Release.Name }}
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service

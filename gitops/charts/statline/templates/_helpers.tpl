@@ -82,6 +82,27 @@ Input: dict with keys (list of env var names), secretName and optional (list of 
 {{- end }}
 {{- end -}}
 
+{{/*
+Sentry env for one component (D-43): its DSN from its own key of the statline Secret (optional,
+so a missing key never blocks the pod), the environment and the trace sample rate. Nothing when
+sentry.enabled is false. Call with (dict "component" "api" "ctx" $).
+*/}}
+{{- define "statline.sentryEnv" -}}
+{{- $s := .ctx.Values.sentry -}}
+{{- if $s.enabled }}
+- name: SENTRY_DSN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .ctx.Values.secrets.name }}
+      key: {{ required (printf "sentry.dsnKeys.%s is required" .component) (index $s.dsnKeys .component) }}
+      optional: true
+- name: SENTRY_ENVIRONMENT
+  value: {{ $s.environment | default .ctx.Values.environment | quote }}
+- name: SENTRY_TRACES_SAMPLE_RATE
+  value: {{ $s.tracesSampleRate | quote }}
+{{- end }}
+{{- end -}}
+
 {{/* Writable scratch space for read-only root filesystems. */}}
 {{- define "statline.tmpVolume" -}}
 - name: tmp
@@ -105,4 +126,21 @@ when devPostgres.enabled (k3d only). Rendered as stringData lines.
 {{- range $k, $v := $data }}
 {{ $k }}: {{ $v | toString | quote }}
 {{- end -}}
+{{- end -}}
+
+{{/*
+HTTPS (443) to public addresses only: private ranges are excluded, so the rule cannot reach the
+VPC, other pods or node addresses. ingesta (sports APIs) and, with Sentry on, api and predicciones.
+*/}}
+{{- define "statline.netpol.internetHttps" -}}
+- to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+          - 10.0.0.0/8
+          - 172.16.0.0/12
+          - 192.168.0.0/16
+  ports:
+    - protocol: TCP
+      port: 443
 {{- end -}}

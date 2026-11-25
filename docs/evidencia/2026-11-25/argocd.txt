@@ -1,0 +1,53 @@
+# 2026-11-25T05:37:33Z · kubectl -n plataforma get applications
+NAME                SYNC     HEALTH    REVISION                                   LAST_OP
+plataforma-config   Synced   Healthy   e7882322595703c9e2fb6230a5e412c436b9a697   Succeeded
+redis               Synced   Healthy   e7882322595703c9e2fb6230a5e412c436b9a697   Succeeded
+root                Synced   Healthy   e7882322595703c9e2fb6230a5e412c436b9a697   Succeeded
+statline-prod       Synced   Healthy   d34b203aa2ea356ebc16673af614b5ce5810722a   Succeeded
+statline-staging    Synced   Healthy   e7882322595703c9e2fb6230a5e412c436b9a697   Succeeded
+
+# statline-prod: source and last sync
+targetRevision=main path=gitops/charts/statline
+finishedAt=2026-11-25T05:33:17Z message=successfully synced (no more tasks)
+
+# statline-prod resources (kind/name sync health)
+ConfigMap/statline-prod-api                             Synced
+ConfigMap/statline-prod-dashboard-api                   Synced
+ConfigMap/statline-prod-dashboard-predicciones-ingesta  Synced
+ConfigMap/statline-prod-ingesta                         Synced
+ConfigMap/statline-prod-predicciones                    Synced
+ConfigMap/statline-prod-smoke                           Synced
+Service/statline-prod-api                               Synced
+Service/statline-prod-predicciones                      Synced
+Service/statline-prod-web                               Synced
+ServiceAccount/statline-prod-api                        Synced
+ServiceAccount/statline-prod-ingesta                    Synced
+ServiceAccount/statline-prod-predicciones               Synced
+ServiceAccount/statline-prod-smoke                      Synced
+ServiceAccount/statline-prod-web                        Synced
+Deployment/statline-prod-api                            Synced
+Deployment/statline-prod-predicciones                   Synced
+Deployment/statline-prod-web                            Synced
+HorizontalPodAutoscaler/statline-prod-api               Synced
+HorizontalPodAutoscaler/statline-prod-predicciones      Synced
+CronJob/statline-prod-ingesta-americano                 Synced
+CronJob/statline-prod-ingesta-basquetbol                Synced
+CronJob/statline-prod-ingesta-futbol                    Synced
+ExternalSecret/statline-secrets                         Synced
+PrometheusRule/statline-prod-alerts                     Synced
+ServiceMonitor/statline-prod-api                        Synced
+ServiceMonitor/statline-prod-predicciones               Synced
+Ingress/statline-prod                                   Synced
+NetworkPolicy/statline-prod-acme-solver-ingress         Synced
+NetworkPolicy/statline-prod-allow-dns                   Synced
+NetworkPolicy/statline-prod-api-egress                  Synced
+NetworkPolicy/statline-prod-api-ingress                 Synced
+NetworkPolicy/statline-prod-default-deny                Synced
+NetworkPolicy/statline-prod-ingesta-egress              Synced
+NetworkPolicy/statline-prod-predicciones-egress         Synced
+NetworkPolicy/statline-prod-predicciones-ingress        Synced
+NetworkPolicy/statline-prod-smoke-egress                Synced
+NetworkPolicy/statline-prod-web-ingress                 Synced
+PodDisruptionBudget/statline-prod-api                   Synced
+PodDisruptionBudget/statline-prod-predicciones          Synced
+PodDisruptionBudget/statline-prod-web                   Synced

@@ -1,0 +1,32 @@
+name: Release
+
+# A vX.Y.Z tag on main publishes its GitHub Release, with notes GitHub generates from the PRs
+# merged since the previous tag. A release that already exists (written by hand) is kept.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+    steps:
+      - name: Create the release unless it exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Tag '$TAG' is not strict vX.Y.Z"; exit 1; }
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::Release $TAG already exists; left as it is."
+          else
+            gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes
+          fi

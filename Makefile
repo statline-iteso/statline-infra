@@ -15,7 +15,7 @@ AWS_PROFILE ?= statline-lab
 export AWS_PROFILE
 endif
 
-.PHONY: help creds check-creds bootstrap backend-config init plan apply apply-eks kubeconfig destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
+.PHONY: help creds check-creds bootstrap backend-config init plan apply secrets apply-eks kubeconfig destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
 
 help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-16s %s\n",$$1,$$2}'
@@ -52,6 +52,11 @@ plan: init ## Plan the principal stack
 apply: plan ## ⚠ Apply the saved plan (creates billable resources)
 	@[[ "$${CONFIRM:-}" == "yes" ]] || { read -rp "Apply this plan? [y/N] " a; [[ "$$a" == y ]]; }
 	$(TF) -chdir=$(PRINCIPAL) apply -input=false principal.tfplan
+	@# The parameters exist now: API keys and Sentry DSNs from the Keychain (RUNBOOK 2.2). Never in CI.
+	@[[ -n "$${CI:-}" ]] || scripts/set-secrets.sh
+
+secrets: check-creds ## API keys and Sentry DSNs into SSM (Keychain, asks once), then sync and restart pods (ASK=1: ask again)
+	@scripts/set-secrets.sh
 
 # module.red is targeted as a whole: -target=module.eks alone pulls in only what eks references (VPC,
 # subnets), not the internet gateway and route tables, and nodes without a route out never join.

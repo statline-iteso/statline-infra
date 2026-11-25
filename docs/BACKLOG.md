@@ -623,5 +623,5 @@ The whole project backlog (proposal §6): **61 issues, 277 story points, nine ep
 
 **Acceptance criteria**
 
-- [ ] Release v1.0.0 en main
+- [x] Release v1.0.0 en main (tags y GitHub Releases en los tres repos; prod desplegado y verificado el 2026-11-25, [evidencia](evidencia/README.md))
 - [ ] Presentación y demo de punta a punta

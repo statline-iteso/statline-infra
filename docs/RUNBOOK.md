@@ -38,7 +38,7 @@ make bootstrap                    # once per lab account: S3 state bucket + Elas
 terraform -chdir=terraform/bootstrap output -raw ingress_ip   # <ip>
 make apply-eks                    # step 1: the EKS cluster and nodes alone (~15 min; the kubernetes/helm providers need it)
 make plan                         # step 2: everything else; read the summary
-make apply                        # asks before applying (~10 min: RDS, charts, database Job)
+make apply                        # asks before applying (~10 min: RDS, charts, database Job), then sets the secrets (2.2)
 make kubeconfig                   # writes the eks-statline context
 kubectl config current-context    # must print eks-statline
 kubectl get nodes -o custom-columns=NAME:.metadata.name,STATUS:.status.conditions[-1].type,PODS:.status.allocatable.pods   # Ready, 110
@@ -51,14 +51,32 @@ If a step fails with `AccessDenied … service control policy`, the lab forbids 
 
 ### 2.2 Secrets Terraform cannot know
 
-Terraform creates every SSM parameter; the API keys are placeholders (`ignore_changes`). Set the real values without leaving them in the shell history:
+Terraform creates every SSM parameter, with the `set-me` placeholder for the values it cannot know (`ignore_changes`). `make destroy` deletes them, so every session needs them again. `make apply` sets them at the end; `make secrets` does it on its own:
+
+| Parameter | Where the value comes from |
+|---|---|
+| `/statline/comun/api-sports-key` | api-sports.io dashboard |
+| `/statline/comun/balldontlie-api-key` | balldontlie.io (optional: Enter skips it) |
+| `/statline/comun/sentry-dsn-{api,predicciones,ingesta,web}` | Sentry → Settings → Projects → `statline-<service>` → Client Keys (DSN); must start with `https://` (D-43) |
+
+`scripts/set-secrets.sh` reads each value from the macOS login Keychain (service `statline/<name>`). The first time, it asks for the missing ones (hidden input) and saves them there, so later sessions need no typing. Without the Keychain (Linux) it asks every run. `make secrets ASK=1` asks again and replaces the saved values, for example after rotating a key. It only writes parameters whose value changed, then, if the cluster is up, forces External Secrets to sync and restarts the Deployments of `statline-staging` and `statline-prod` (the CronJobs read the new Secret on their next run). A service whose DSN is still `set-me` runs with Sentry off.
+
+To see what SSM holds (first 12 characters only):
 
 ```bash
-read -rs KEY && aws ssm put-parameter --overwrite --type SecureString --name /statline/comun/api-sports-key --value "$KEY" >/dev/null; unset KEY
-read -rs KEY && aws ssm put-parameter --overwrite --type SecureString --name /statline/comun/balldontlie-api-key --value "$KEY" >/dev/null; unset KEY   # optional
+for p in api-sports-key sentry-dsn-api sentry-dsn-predicciones sentry-dsn-ingesta sentry-dsn-web; do
+  printf "%-24s " $p; aws ssm get-parameter --with-decryption --name /statline/comun/$p --query Parameter.Value --output text | cut -c1-12
+done
 ```
 
-`--value` is visible in `ps` for the second the command runs; on a shared machine use `--cli-input-json file://…` from a file you delete afterwards. External Secrets picks the change up within the hour (section 6 has `force-sync`). The admin password for the app (`admin@statline.local`) is generated per environment (D-37):
+Source maps of the SPA are uploaded by the frontend's `cd.yml`. It needs, in `statline-frontend` settings, the secret `SENTRY_AUTH_TOKEN` (a Sentry organization token) and the variable `SENTRY_ORG` (`statline-iteso`; `SENTRY_PROJECT` defaults to `statline-web`). Both are set once, not per session:
+
+```bash
+gh secret set SENTRY_AUTH_TOKEN -R statline-iteso/statline-frontend     # paste the token when asked
+gh variable set SENTRY_ORG -R statline-iteso/statline-frontend --body statline-iteso
+```
+
+`--value` (and the Keychain write) is visible in `ps` for the moment the command runs; fine on a personal laptop, not on a shared machine. Without the script, External Secrets picks a change up within the hour; to force it: `kubectl -n statline-$ENV annotate externalsecret --all force-sync=$(date +%s) --overwrite`. The admin password for the app (`admin@statline.local`) is generated per environment (D-37):
 
 ```bash
 aws ssm get-parameter --with-decryption --name /statline/staging/seed-admin-password --query Parameter.Value --output text

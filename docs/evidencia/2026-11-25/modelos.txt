@@ -1,0 +1,14 @@
+# 2026-11-25T05:37:44Z · prod: seed-demo (D-42), then retrain and generate through https://52.71.150.91.nip.io/api as the seeded ADMIN
+ResultadoDemo(deporte=<Deporte.BASQUETBOL: 'BASQUETBOL'>, exitosa=True, partidos=618, estadisticas=13948, error=None)
+ResultadoDemo(deporte=<Deporte.AMERICANO: 'AMERICANO'>, exitosa=True, partidos=141, estadisticas=3824, error=None)
+ResultadoDemo(deporte=<Deporte.FUTBOL: 'FUTBOL'>, exitosa=True, partidos=426, estadisticas=11177, error=None)
+
+# active models (GET /api/modelos)
+FUTBOL      PROYECCION_JUGADOR  20261125053628-synthetic
+FUTBOL      RESULTADO_PARTIDO   20261125053621-synthetic
+AMERICANO   PROYECCION_JUGADOR  20261125053621-synthetic
+AMERICANO   RESULTADO_PARTIDO   20261125053619-synthetic
+BASQUETBOL  PROYECCION_JUGADOR  20261125053619-synthetic
+BASQUETBOL  RESULTADO_PARTIDO   20261125053609-synthetic
+
+# generated: BASQUETBOL 11 forecasts, 104 projections; AMERICANO 4, 84; FUTBOL 9, 150

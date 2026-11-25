@@ -2,6 +2,24 @@
 
 Lo que pide [RUNBOOK §9](../RUNBOOK.md#9-evidence-for-sl-60), por sesión. Las horas de los archivos están en UTC.
 
+## 2026-11-25 · prod (v1.0.0) y Sentry en staging
+
+Entorno: el mismo de la sesión anterior, reconstruido con `make apply-eks` y `make apply`; los secretos con `make secrets` (infra #95). Prod en `https://52.71.150.91.nip.io`, con `main` en `d34b203` (infra #82) e imágenes `pardosito/web:cf0a25d` y `pardosito/{api,predicciones,ingesta}:6efb2c0`, los commits de `v1.0.0`. Staging en `https://staging.52.71.150.91.nip.io`, desde `develop`, con Sentry activo (D-43): `web:5dda0f1` y `{api,predicciones,ingesta}:e4edc3e`.
+
+| Qué | Estado | Archivo |
+|---|---|---|
+| Nodos, pods y ExternalSecrets | ✅ 2 nodos Ready (110 pods cada uno); prod y staging Running; `statline-secrets` SecretSynced en los dos ambientes y `statline-staging-web-config` (el `config.js` del DSN de web) en staging | [cluster.txt](2026-11-25/cluster.txt) |
+| Argo CD: las cinco Applications | ✅ todas Synced y Healthy; `statline-prod` sigue `main` (revisión `d34b203`) y `statline-staging` sigue `develop` | [argocd.txt](2026-11-25/argocd.txt), [argocd-applications.png](2026-11-25/argocd-applications.png) |
+| Smoke de prod | ✅ hook PostSync `statline-prod-smoke` Succeeded; `make smoke ENV=prod` pasa los cinco checks; `scripts/smoke.sh` contra el host público: `/healthz` 200 y `/api/ligas` 401 | [smoke.txt](2026-11-25/smoke.txt), [smoke-publico.txt](2026-11-25/smoke-publico.txt) |
+| Datos y modelos de prod (D-42) | ✅ `seed-demo` (618 partidos NBA, 141 NFL, 426 Liga MX); los seis modelos activos; pronósticos y proyecciones: NBA 11/104, NFL 4/84, Liga MX 9/150. Los mismos pasos en staging dieron los mismos números | [modelos.txt](2026-11-25/modelos.txt) |
+| Grafana con tráfico de prod | ✅ StatLine · API (peticiones por ruta, latencia p50/p95/p99, caché) y StatLine · Predicciones e ingesta, con el namespace `statline-prod` | [grafana-api.png](2026-11-25/grafana-api.png), [grafana-predicciones-ingesta.png](2026-11-25/grafana-predicciones-ingesta.png) |
+| Sentry: errores de api y predicciones | ✅ un evento de prueba desde cada pod de staging, con su DSN y su salida HTTPS: environment `staging`, release `e4edc3e` | [sentry-api.png](2026-11-25/sentry-api.png), [sentry-predicciones.png](2026-11-25/sentry-predicciones.png) |
+| Sentry: error de web con source maps | ✅ un error lanzado desde el navegador en staging; release `5dda0f1`, y la traza muestra el código original, así que los source maps que sube `cd.yml` funcionan | [sentry-web.png](2026-11-25/sentry-web.png) |
+| Sentry Crons de ingesta | ✅ un Job desde `statline-staging-ingesta-basquetbol` (12 partidos reales del respaldo) registra su check-in OK en el monitor `ingesta-basquetbol` | [sentry-ingesta.png](2026-11-25/sentry-ingesta.png) |
+| Release v1.0.0 | ✅ tags y GitHub Releases `v1.0.0` en los tres repos; back-merge de `main` a `develop` con merge commit (infra #96, backend #82, frontend #38). El bump de prod a las etiquetas `v1.0.0` (infra #97) se cerró: son reconstrucciones de los mismos commits que prod ya corre | — |
+
+Sentry solo está en staging: prod lo recibe con v1.1.0. Los eventos de prueba de api y predicciones se mandan con el SDK desde `kubectl exec`, porque la API no tiene un endpoint seguro para provocar un 500; prueban el DSN, la salida de red y el release, no los manejadores de errores de la app (esos tienen pruebas unitarias en backend #78).
+
 ## 2026-11-23 · staging en AWS Learner Lab
 
 Entorno: EKS 1.35 (2 × t3.medium), RDS PostgreSQL 16, `https://staging.52.71.150.91.nip.io`. Imágenes `pardosito/web:1d11fbc` y `pardosito/{api,predicciones,ingesta}:280774b` (infra #60).
