@@ -1,0 +1,51 @@
+# 2026-11-25T05:37:25Z · kubectl get nodes
+NAME                         STATUS   PODS   VERSION
+ip-10-0-13-94.ec2.internal   Ready    110    v1.35.9-eks-9adbfea
+ip-10-0-8-35.ec2.internal    Ready    110    v1.35.9-eks-9adbfea
+
+# kubectl -n statline-prod get pods
+NAME                                          READY   STATUS      RESTARTS   AGE
+demo-seed-5rcgs                               0/1     Completed   0          3m35s
+statline-prod-api-846f6988b8-bbchb            1/1     Running     0          6m2s
+statline-prod-api-846f6988b8-gx9d8            1/1     Running     0          5m45s
+statline-prod-predicciones-85b8586758-bdk9q   1/1     Running     0          6m2s
+statline-prod-predicciones-85b8586758-hkbhg   1/1     Running     0          54s
+statline-prod-predicciones-85b8586758-xwccz   1/1     Running     0          54s
+statline-prod-predicciones-85b8586758-zp74v   1/1     Running     0          54s
+statline-prod-web-79f548f6c9-4l24h            1/1     Running     0          5m57s
+statline-prod-web-79f548f6c9-djhwh            1/1     Running     0          6m2s
+
+# kubectl -n statline-prod get externalsecret
+NAME               STORETYPE            STORE          REFRESH INTERVAL   STATUS         READY   LAST SYNC
+statline-secrets   ClusterSecretStore   statline-ssm   1h                 SecretSynced   True    39m
+
+# statline-prod images
+statline-prod-api  docker.io/pardosito/api:6efb2c0
+statline-prod-predicciones  docker.io/pardosito/predicciones:6efb2c0
+statline-prod-web  docker.io/pardosito/web:cf0a25d
+statline-prod-ingesta-americano  docker.io/pardosito/ingesta:6efb2c0
+statline-prod-ingesta-basquetbol  docker.io/pardosito/ingesta:6efb2c0
+statline-prod-ingesta-futbol  docker.io/pardosito/ingesta:6efb2c0
+
+# kubectl -n statline-staging get pods
+NAME                                             READY   STATUS      RESTARTS   AGE
+demo-seed-mb6dq                                  0/1     Completed   0          37m
+ingesta-nba-sentry-1795583149-vpkfb              0/1     Completed   0          31m
+statline-staging-api-59cbff6c86-4gvxc            1/1     Running     0          39m
+statline-staging-api-59cbff6c86-t4rsf            1/1     Running     0          38m
+statline-staging-predicciones-7768d8c54f-mlwkx   1/1     Running     0          39m
+statline-staging-web-cb6c69f55-ckqn5             1/1     Running     0          39m
+statline-staging-web-cb6c69f55-f7gjx             1/1     Running     0          39m
+
+# kubectl -n statline-staging get externalsecret
+NAME                          STORETYPE            STORE          REFRESH INTERVAL   STATUS         READY   LAST SYNC
+statline-secrets              ClusterSecretStore   statline-ssm   1h                 SecretSynced   True    39m
+statline-staging-web-config   ClusterSecretStore   statline-ssm   1h                 SecretSynced   True    39m
+
+# statline-staging images
+statline-staging-api  docker.io/pardosito/api:e4edc3e
+statline-staging-predicciones  docker.io/pardosito/predicciones:e4edc3e
+statline-staging-web  docker.io/pardosito/web:5dda0f1
+statline-staging-ingesta-americano  docker.io/pardosito/ingesta:e4edc3e
+statline-staging-ingesta-basquetbol  docker.io/pardosito/ingesta:e4edc3e
+statline-staging-ingesta-futbol  docker.io/pardosito/ingesta:e4edc3e

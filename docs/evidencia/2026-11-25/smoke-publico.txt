@@ -1,0 +1,5 @@
+# 2026-11-25T05:37:42Z · scripts/smoke.sh https://52.71.150.91.nip.io
+Smoke checks against https://52.71.150.91.nip.io
+ok    https://52.71.150.91.nip.io/healthz -> 200 (attempt 1)
+ok    https://52.71.150.91.nip.io/api/ligas -> 401 (attempt 1)
+public smoke checks passed
