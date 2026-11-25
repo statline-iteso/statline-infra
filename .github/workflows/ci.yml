@@ -4,6 +4,9 @@ name: CI
 # `terraform plan` of principal posted as a PR comment. The plan uses the Learner Lab keys that
 # `make creds` stores as the AWS_* secrets (D-38). They expire with the lab session, so the plan job
 # skips with a notice when they are stale, and it never fails the PR (informational only).
+# Also: Trivy IaC scan of the Terraform and the rendered charts (accepted findings in
+# .trivyignore), actionlint and zizmor on the workflows, gitleaks over the whole history.
+# CodeQL (Actions) runs in codeql.yml.
 
 on:
   push:
@@ -27,8 +30,10 @@ jobs:
     name: fmt, validate, tflint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: 1.10.5
       - name: terraform fmt
@@ -39,7 +44,7 @@ jobs:
             terraform -chdir=$d init -backend=false -input=false
             terraform -chdir=$d validate
           done
-      - uses: terraform-linters/setup-tflint@v4
+      - uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4.1.1
         with:
           tflint_version: v0.54.0
       - name: tflint
@@ -54,7 +59,9 @@ jobs:
     name: shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - run: shellcheck scripts/*.sh
 
   plan:
@@ -71,7 +78,9 @@ jobs:
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       AWS_REGION: us-east-1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Lab credentials still valid?
         id: creds
         run: |
@@ -84,7 +93,7 @@ jobs:
           else
             echo "ok=true" >> "$GITHUB_OUTPUT"
           fi
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         if: steps.creds.outputs.ok == 'true'
         with:
           terraform_version: 1.10.5
@@ -113,7 +122,7 @@ jobs:
           echo "summary=$(grep -E '^(Plan:|No changes)' plan.txt | tail -1)" >> "$GITHUB_OUTPUT"
       - name: Comment the plan on the PR
         if: always() && steps.creds.outputs.ok == 'true' && hashFiles('terraform/principal/plan.txt') != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         env:
           SUMMARY: "${{ steps.plan.outputs.summary || 'plan failed, see the log below' }}"
         with:
@@ -142,8 +151,10 @@ jobs:
       KUBECONFORM_VERSION: v0.8.0
       KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
     steps:
-      - uses: actions/checkout@v4
-      - uses: azure/setup-helm@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
         with:
           version: v3.16.3
       - name: kubeconform (pinned release, checksum verified)
@@ -159,3 +170,69 @@ jobs:
         run: make helm-lint
       - name: make helm-validate
         run: make helm-validate
+
+  iac:
+    name: iac · trivy config
+    runs-on: ubuntu-latest
+    env:
+      TRIVY_IMAGE: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: v3.16.3
+      - name: Render the charts (each environment, monitoring on)
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/rendered"; mkdir -p "$out"
+          for env in staging prod; do
+            helm template "statline-$env" gitops/charts/statline -f "gitops/charts/statline/values-$env.yaml" \
+              --set monitoring.enabled=true > "$out/statline-$env.yaml"
+          done
+          helm template redis gitops/charts/redis > "$out/redis.yaml"
+      - name: Trivy config (fail on HIGH/CRITICAL; accepted findings in .trivyignore)
+        run: |
+          set -euo pipefail
+          run() { docker run --rm -v "$PWD:/repo:ro" -v "$RUNNER_TEMP/rendered:/rendered:ro" -w /repo "$TRIVY_IMAGE" \
+            config --severity HIGH,CRITICAL --exit-code 1 --ignorefile .trivyignore --skip-version-check "$@"; }
+          run terraform
+          run /rendered
+          run gitops/argocd
+          run gitops/plataforma
+
+  workflows:
+    name: workflows · actionlint, zizmor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: actionlint (bundles shellcheck for run steps)
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo "$ACTIONLINT_IMAGE" -color
+        env:
+          ACTIONLINT_IMAGE: rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4.2.0
+        with:
+          version: "0.13.7"
+      - name: zizmor (workflow security; fails on any finding)
+        run: uvx zizmor@1.31.1 --format github .github/workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  secrets:
+    name: secrets · gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # the whole history, not just this commit
+          persist-credentials: false
+      - name: gitleaks over every commit
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' \
+            "$GITLEAKS_IMAGE" git /repo --redact --no-banner --verbose
+        env:
+          GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
