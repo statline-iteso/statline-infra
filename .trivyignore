@@ -1,0 +1,16 @@
+# Trivy IaC findings accepted on purpose (CI job "iac"). Each is a constraint of the AWS Learner
+# Lab or of the budget (DECISIONS D-38, §3 Known limitations); revisit them in a normal account.
+
+# EKS secrets envelope encryption needs a customer-managed KMS key and a key policy for LabRole.
+# Kubernetes Secrets here only mirror SSM SecureStrings (External Secrets).
+AWS-0039
+
+# Public EKS API endpoint, open to any address: there is no VPN or bastion, and kubectl and
+# Terraform run from laptops and GitHub runners whose IPs change. Access still needs IAM
+# (LabRole) through EKS access entries.
+AWS-0040
+AWS-0041
+
+# Nodes get public IPs in public subnets: there is no NAT gateway (about USD 1/day, D-38).
+# Security groups admit only the NLB and the cluster; RDS stays in private subnets.
+AWS-0164

@@ -1,0 +1,17 @@
+# Weekly dependency updates as PRs into develop (reviewed like any other PR; auto-merge.yml
+# does not touch them). Terraform: provider versions in each stack's lock file. Platform chart
+# versions are pinned in Terraform values (D-25) and bumped by hand after a test on k3d.
+version: 2
+updates:
+  - package-ecosystem: terraform
+    directories: [/terraform/bootstrap, /terraform/principal]
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    groups:
+      terraform-providers: { patterns: ["*"] }
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions: { patterns: ["*"] }
