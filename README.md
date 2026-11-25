@@ -110,6 +110,7 @@ make apply-eks                    # step 1: only the EKS cluster and nodes (~15 
 make plan                         # step 2: everything else (RDS, SSM, namespaces, platform charts, database Job)
 make apply                        # asks before applying, then sets the API keys and Sentry DSNs (make secrets)
 make kubeconfig                   # context eks-statline
+make datos ENV=prod               # after Argo CD syncs: live data for prod (ENV=staging adds demo data), then models
 terraform -chdir=terraform/principal output -raw grafana_admin_password   # Grafana, user admin
 ```
 
