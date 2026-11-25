@@ -42,19 +42,19 @@ api:
   autoscaling:
     enabled: true
   image:
-    tag: "38049a4"
+    tag: "ad52323"
 predicciones:
   autoscaling:
     enabled: true
   image:
-    tag: "38049a4"
+    tag: "ad52323"
 ingesta:
   config:
     # On since D-40: the free API-Sports plan answers nothing, so the fallbacks are the only real data
     # and no game can arrive from two providers. Prod too since D-41.
     fallbackHabilitado: "true"
   image:
-    tag: "38049a4"
+    tag: "ad52323"
 
 monitoring:
   enabled: true
