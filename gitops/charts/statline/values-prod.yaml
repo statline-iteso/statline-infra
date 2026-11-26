@@ -33,10 +33,10 @@ sentry:
   enabled: true
   webDsnParameter: /statline/comun/sentry-dsn-web
 
-# Cognito (D-47): switch to cognito once Terraform created the pools (cognito_enabled) and the api
-# and web images support it (v1.2.0).
+# Cognito (D-47): prod signs in through its pool from v1.2.0 (this file reaches main with the
+# release; the v1.2.0 images understand it).
 auth:
-  mode: local
+  mode: cognito
   cognito:
     userPoolIdParameter: /statline/prod/cognito-user-pool-id
     clientIdParameter: /statline/prod/cognito-client-id
