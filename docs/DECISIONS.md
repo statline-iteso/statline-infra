@@ -239,6 +239,7 @@ Errors from the four services go to hosted Sentry (sentry.io, the GitHub Student
 - **Network:** api and predicciones get HTTPS egress to public addresses (private ranges excluded, the same rule ingesta has) only when `sentry.enabled`. Sentry ingest has no fixed IP range to allow instead.
 - **web:** the browser calls Sentry directly. A second ExternalSecret, `<release>-web-config`, renders `config.js` from the web DSN with an External Secrets template (a non-https value renders as empty). `web.yaml` mounts it over the image's empty default.
 - **Off by default** in `values.yaml` and k3d; staging and prod set `sentry.enabled: true`.
+- **Traces:** `sentry.tracesSampleRate` is `"0"` (errors only) in `values.yaml`; since 2026-11-25 staging and prod trace every request (`"1.0"`) so Sentry shows performance traces next to the errors. The web SPA stays errors only.
 
 
 ### D-44 · Build once, promote
