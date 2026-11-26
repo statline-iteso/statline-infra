@@ -58,6 +58,7 @@ Terraform creates every SSM parameter, with the `set-me` placeholder for the val
 | `/statline/comun/api-sports-key` | api-sports.io dashboard |
 | `/statline/comun/balldontlie-api-key` | balldontlie.io (optional: Enter skips it) |
 | `/statline/comun/sentry-dsn-{api,predicciones,ingesta,web}` | Sentry → Settings → Projects → `statline-<service>` → Client Keys (DSN); must start with `https://` (D-43) |
+| Cognito admin password (not SSM) | only when the pools exist (`cognito_enabled`, D-47): Keychain `statline/admin-password`, asked once (6+ characters); set as permanent for `admin@statline.local` in both pools |
 
 `scripts/set-secrets.sh` reads each value from the macOS login Keychain (service `statline/<name>`). The first time, it asks for the missing ones (hidden input) and saves them there, so later sessions need no typing. Without the Keychain (Linux) it asks every run. `make secrets ASK=1` asks again and replaces the saved values, for example after rotating a key. It only writes parameters whose value changed, then, if the cluster is up, forces External Secrets to sync and restarts the Deployments of `statline-staging` and `statline-prod` (the CronJobs read the new Secret on their next run). A service whose DSN is still `set-me` runs with Sentry off.
 
@@ -76,7 +77,7 @@ gh secret set SENTRY_AUTH_TOKEN -R statline-iteso/statline-frontend     # paste 
 gh variable set SENTRY_ORG -R statline-iteso/statline-frontend --body statline-iteso
 ```
 
-`--value` (and the Keychain write) is visible in `ps` for the moment the command runs; fine on a personal laptop, not on a shared machine. Without the script, External Secrets picks a change up within the hour; to force it: `kubectl -n statline-$ENV annotate externalsecret --all force-sync=$(date +%s) --overwrite`. The admin password for the app (`admin@statline.local`) is generated per environment (D-37):
+`--value` (and the Keychain write) is visible in `ps` for the moment the command runs; fine on a personal laptop, not on a shared machine. Without the script, External Secrets picks a change up within the hour; to force it: `kubectl -n statline-$ENV annotate externalsecret --all force-sync=$(date +%s) --overwrite`. With `auth.mode: local` (the default) the admin password for the app (`admin@statline.local`) is generated per environment (D-37); with `auth.mode: cognito` it is the Keychain one above:
 
 ```bash
 aws ssm get-parameter --with-decryption --name /statline/staging/seed-admin-password --query Parameter.Value --output text
@@ -117,51 +118,35 @@ Grafana: `kubectl -n plataforma port-forward svc/kube-prometheus-stack-grafana 3
 
 ## 3. First data and models
 
-Each environment has its own database, so run this section once per environment. Set the environment, log in as the seeded admin and keep the token in a variable:
+Each environment has its own database, and `make destroy` wipes both. After a `make apply` that followed `make destroy`, once Argo CD has synced the environment, load its data (after `make destroy-eks` the data is still there: skip this section):
 
 ```bash
-ENV=staging                       # or prod
-H=https://staging.<ip>.nip.io     # prod: https://<ip>.nip.io
-read -rs PASS                     # /statline/$ENV/seed-admin-password (2.2)
-TOKEN=$(curl -s "$H/api/auth/login" -H 'content-type: application/json' \
-  -d "{\"email\":\"admin@statline.local\",\"password\":\"$PASS\"}" | jq -r .accessToken); unset PASS
+make datos ENV=staging    # demo data (D-42) + backfill of the current seasons + models
+make datos ENV=prod       # backfill of the current seasons only, live data (D-46) + models
 ```
 
-**Ingest.** The CronJobs run on their schedule (`0 8 * * *` NBA, `0 8 * * 2` NFL, `0 8 * * 1,5` Liga MX). To run one now:
+`scripts/cargar-datos.sh` does the whole section:
+
+1. **Demo data (staging only).** `ingesta seed-demo --confirmar`: synthetic games marked `demo`, enough for every model (backend D-29). Prod never gets it.
+2. **Backfill.** One Job per sport from its CronJob spec: `ingesta run <deporte> --desde <season start> --hasta <today+7>`.
+   - The season starts are in the script (`DESDE_BASQUETBOL`, `DESDE_AMERICANO` and `DESDE_FUTBOL` override them); `HASTA` overrides the end.
+   - On the free plans every run switches to the fallbacks (D-41), and the free-plan 429s are retried.
+   - Expect about 10 minutes, NFL and Liga MX one after the other.
+3. **Models.** It retrains the 6 models (3 sports × 2 types), then generates forecasts and projections. It calls predicciones from a curl pod with the smoke label, so no admin login is involved.
+   - A model is activated only if it beats its baseline (backend D-31). `activado: false` with a `motivo`, or "not enough data", is a valid answer.
+   - Prod has no box scores, so its projection models never train (D-46).
+4. **Summary.** Per sport: live and demo games, finished and scheduled, plus the active models. In prod it warns if any `demo-` game exists.
+
+The CronJobs then run on their schedule (`0 8 * * *` NBA, `0 8 * * 2` NFL, `0 8 * * 1,5` Liga MX) and keep both environments current. To run one now with the default range (yesterday and today):
 
 ```bash
 kubectl -n statline-$ENV create job ingesta-nba-$(date +%s) --from=cronjob/statline-$ENV-ingesta-basquetbol
 kubectl -n statline-$ENV logs -f job/<that job>
 ```
 
-Do this once per sport on the first deploy: the NFL, Liga MX and fallback mappings come from provider docs and have never seen a live response (backend D-24, D-25, D-27). A mapping error shows up as discarded lines or a failed `ejecucion_ingesta` row (`GET $H/api/ingestas`). Save the failing response as a fixture and fix the adapter.
+A mapping error shows up as discarded lines, or as a failed `ejecucion_ingesta` row (`GET /api/ingestas`). Save the failing response as a fixture and fix the adapter.
 
-**Train and generate.** Training needs finished games in the database. With real data:
-
-```bash
-for d in BASQUETBOL AMERICANO FUTBOL; do for t in RESULTADO_PARTIDO PROYECCION_JUGADOR; do
-  curl -s -X POST "$H/api/modelos/reentrenar" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-    -d "{\"deporte\":\"$d\",\"tipo\":\"$t\"}" | jq '{deporte, tipo, activado, motivo}'
-done; done
-for d in BASQUETBOL AMERICANO FUTBOL; do
-  curl -s -X POST "$H/api/pronosticos/generar"  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "{\"deporte\":\"$d\"}" | jq .generados
-  curl -s -X POST "$H/api/proyecciones/generar" -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d "{\"deporte\":\"$d\"}" | jq .generados
-done
-```
-
-A model is activated only if it beats its baseline (backend D-31): `activado: false` with a `motivo` is a valid answer. Training can outlast the api's 30 s proxy timeout (503) while predicciones still finishes; check `GET $H/api/modelos`.
-
-**With the free API-Sports plan** a run switches to the fallback providers (DECISIONS D-40, D-41): both environments get real games from balldontlie and TheSportsDB, with no NFL or Liga MX box scores. That is not enough to train every model, so use the demo data below for the models.
-
-**Without enough real games (both environments, D-42).** `ingesta seed-demo` writes synthetic games marked `demo` (backend D-29), enough for every model to activate; the frontend labels them as synthetic. Run it as a one-off Job from the NBA CronJob spec, which already has the database secret:
-
-```bash
-kubectl -n statline-$ENV create job demo-seed --from=cronjob/statline-$ENV-ingesta-basquetbol --dry-run=client -o json \
-  | jq '.spec.template.spec.containers[0].args = ["seed-demo","--confirmar"]' | kubectl apply -f -
-kubectl -n statline-$ENV logs -f job/demo-seed
-```
-
-Then train and generate as above. In prod, run it only while no real provider supplies player box scores (D-42).
+**From the app (ADMIN).** The same training and generation are available through the API, as `POST /api/modelos/reentrenar`, `/api/pronosticos/generar` and `/api/proyecciones/generar`, with an ADMIN token. The seeded admin is `admin@statline.local`, with the password in `/statline/$ENV/seed-admin-password`. Training can take longer than the api's 30 s proxy timeout (503) while predicciones still finishes; check `GET /api/modelos`.
 
 ## 4. Post-deploy smoke tests
 
@@ -287,6 +272,17 @@ Staging and prod use `syncPolicy.retry.limit: 2` with backoff from 10 s (factor 
 
 ## 8. Tear down (end of every session)
 
+Two ways, both asking before they run:
+
+| | `make destroy-eks` (D-48) | `make destroy` |
+|---|---|---|
+| Removes | the platform charts, the ingress NLB, EKS and the nodes | the whole `principal` stack |
+| Keeps | RDS (both databases), the Cognito pools and their users, SSM parameters (API keys, DSNs, pool ids), the VPC, CloudWatch log groups | only the bootstrap pair |
+| Cost while down | about USD 0.50/day (RDS) | about USD 0.12/day (Elastic IP) |
+| Next session | `make creds` → `make apply-eks` → `make plan` → `make apply` → Argo CD; **no `make datos`**, the CronJobs fill the missing days | the same, plus `make datos` for each environment and new sign-ups |
+
+Use `make destroy-eks` between sessions and `make destroy` when the project is done or the data does not matter. `make apply` after `make destroy-eks` recreates RDS's ingress rule for the new cluster; the database Job finds both databases and leaves them, and the api's initContainers run only pending migrations.
+
 `make destroy` removes the whole `principal` stack, the database included (D-16). The S3 state bucket and the Elastic IP from `make bootstrap` stay (the IP keeps the nip.io hosts valid, about USD 3.60/month), so the next session needs only `make creds`, `make apply-eks` and `make apply`. The destroy first deletes the Argo CD Applications and ExternalSecrets while their controllers still run (`scripts/vaciar-gitops.sh`), then removes the platform charts and waits for the ingress NLB to disappear (`scripts/esperar-nlb.sh`); otherwise its network interfaces would block deleting the VPC.
 
 1. **Keep the data, if it matters.** PostgreSQL is private and the namespaces are default-deny, so dump from a Job built from the NBA CronJob: it keeps the labels the PostgreSQL egress rule allows and `DATABASE_URL` from `statline-secrets`; only the image and the command change.
@@ -302,13 +298,14 @@ Staging and prod use `syncPolicy.retry.limit: 2` with backoff from 10 s (factor 
    Restore after the next `make apply` (and after the api pods have migrated) the same way, with the file mounted from a ConfigMap or piped through `kubectl exec -i` into `psql "$DATABASE_URL"`. Dumps hold user emails and password hashes: keep them out of the repo.
 2. **Destroy.**
    ```bash
-   make destroy                      # shows the destroy plan, asks before running (~15 min)
+   make destroy-eks                  # cluster only; RDS and Cognito stay (D-48), ~12 min
+   make destroy                      # or everything: shows the destroy plan, asks before running (~15 min)
    kubectl config delete-context eks-statline
    ```
 3. Check nothing billable is left but the bootstrap pair:
    ```bash
    aws eks list-clusters --query clusters                       # []
-   aws rds describe-db-instances --query 'DBInstances[].DBInstanceIdentifier'   # []
+   aws rds describe-db-instances --query 'DBInstances[].DBInstanceIdentifier'   # [] (["statline"] after destroy-eks)
    aws elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerName' # []
    aws ec2 describe-instances --filters Name=instance-state-name,Values=running --query 'Reservations[].Instances[].InstanceId'   # []
    ```

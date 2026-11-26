@@ -27,7 +27,7 @@ ITESO final project, Fall 2026: **Juan Pablo González** (backend, frontend, fou
 ## 3. Scope
 
 In scope (proposal §1.2, moved from Azure to AWS by D-38):
-- on the AWS Learner Lab: one VPC, EKS, RDS PostgreSQL, SSM Parameter Store, CloudWatch logs, an Elastic IP for the ingress (hosts on nip.io)
+- on the AWS Learner Lab: one VPC, EKS, RDS PostgreSQL, SSM Parameter Store, Cognito user pools (D-47), CloudWatch logs, an Elastic IP for the ingress (hosts on nip.io)
 - one EKS cluster with namespaces `plataforma`, `statline-staging`, `statline-prod`
 - platform charts: ingress-nginx, cert-manager, Argo CD, kube-prometheus-stack, External Secrets; Redis as our own chart
 - per environment: Deployments `web` (2 replicas), `api`, `predicciones`; CronJobs `ingesta-basquetbol`, `ingesta-americano`, `ingesta-futbol`; HPA for api and predicciones; NetworkPolicies; PDBs; ExternalSecret
@@ -43,7 +43,7 @@ Out of scope: fantasy-platform sync (ESPN, Yahoo), betting odds, multi-region, s
 - **The lab's SCP denies some reads,** for example `s3:GetBucketObjectLockConfiguration`, which breaks `aws_s3_bucket`: S3 buckets use `awscc_s3_bucket`. The lab also denies reading its own IAM policies, so permission gaps show up on apply.
 - **Credentials expire with the session.** `make creds` at the start of each one: it writes the `statline-lab` profile (never `[default]`) and the `AWS_*` secrets of this repo for CI.
 - **No secrets in code.** Passwords come from `random_password`, go to SSM SecureStrings, and reach pods through External Secrets.
-- `make destroy` at the end of every session unless the environment must stay up (demo, review): the cluster bills about USD 0.30/h.
+- `make destroy-eks` at the end of every session unless the environment must stay up (demo, review): the cluster bills about USD 0.20/h. It keeps RDS and the Cognito pools (about USD 0.50/day, D-48); `make destroy` removes everything.
 
 ## 5. Stack
 
@@ -70,13 +70,14 @@ make bootstrap             # once per lab account: S3 state bucket + ingress Ela
 make apply-eks             # ⚠ first apply only: the EKS cluster and nodes
 make plan                  # terraform plan for principal (saved to principal.tfplan)
 make apply                 # ⚠ applies the saved plan (asks for confirmation), then runs make secrets
-make secrets               # API keys and Sentry DSNs into SSM from the Keychain (asks once); ASK=1 asks again
+make datos ENV=prod        # after Argo CD syncs: backfill live data (+ demo data in staging), then models
+make secrets               # API keys and Sentry DSNs into SSM, Cognito admin password, from the Keychain (asks once); ASK=1 asks again
 make kubeconfig            # context eks-statline
+make destroy-eks           # ⚠ destroys the cluster only; RDS, Cognito and SSM stay (D-48)
 make destroy               # ⚠ destroys principal (asks; waits for the ingress NLB before the VPC)
 make output                # principal outputs
 make lint                  # fmt check, validate, tflint, shellcheck, helm lint, kubeconform
 make k3d-up / k3d-down     # local cluster with ingress-nginx and the three namespaces
-make diagram               # docs/solucion.mmd → docs/solucion.png
 ```
 
 ## 7. Repository layout
@@ -84,7 +85,7 @@ make diagram               # docs/solucion.mmd → docs/solucion.png
 ```
 statline-infra/
 ├── AGENTS.md · CLAUDE.md · README.md · Makefile · mise.toml
-├── docs/                    ARCHITECTURE · CONVENTIONS · DECISIONS · BACKLOG · RUNBOOK · modelo-datos · api · pendientes · planning/
+├── docs/                    ARCHITECTURE · CONVENTIONS · DECISIONS · BACKLOG · RUNBOOK · modelo-datos · api · componentes · despliegue · pendientes · planning/
 ├── terraform/
 │   ├── bootstrap/           S3 state bucket (awscc) + ingress Elastic IP (local state)
 │   ├── principal/           the environment: calls the modules below
@@ -93,18 +94,19 @@ statline-infra/
 │       ├── eks/             cluster, node group, addons (LabRole)
 │       ├── datos/           RDS PostgreSQL
 │       ├── seguridad/       SSM parameters
+│       ├── identidad/       Cognito user pools (D-47, behind cognito_enabled)
 │       ├── observabilidad/  CloudWatch log groups
 │       └── plataforma/      namespaces, five helm_release, database Job
 ├── gitops/                  Helm charts (statline, redis) + values per environment + Argo CD Applications
 ├── k3d/                     local cluster config
-├── scripts/                 lab-creds.sh · check-creds.sh · bootstrap-account.sh · backend-config.sh · esperar-nlb.sh · vaciar-gitops.sh · set-secrets.sh · k3d-up.sh · bump-image-tags.sh · smoke.sh
+├── scripts/                 lab-creds.sh · check-creds.sh · bootstrap-account.sh · backend-config.sh · esperar-nlb.sh · vaciar-gitops.sh · set-secrets.sh · cargar-datos.sh · k3d-up.sh · bump-image-tags.sh · smoke.sh
 └── .github/workflows/       ci.yml · cd.yml (tag bump PRs) · auto-merge.yml
 ```
 
 ## 8. Rules for agents
 
 1. **Stay in scope** (§3). If a request needs a new AWS service or a new kind of resource, stop and ask.
-2. **Never run `terraform apply`, `terraform destroy`, `make apply`, `make destroy`, `kubectl apply/delete` against EKS, or `aws` commands that change resources, without explicit confirmation.** Never use the `[default]` AWS profile or a non-StatLine kubectl context. `plan`, `validate`, `tflint` and k3d are fine.
+2. **Never run `terraform apply`, `terraform destroy`, `make apply`, `make destroy`, `make destroy-eks`, `kubectl apply/delete` against EKS, or `aws` commands that change resources, without explicit confirmation.** Never use the `[default]` AWS profile or a non-StatLine kubectl context. `plan`, `validate`, `tflint` and k3d are fine.
 3. **All AWS resources go through Terraform.** If something was clicked in the console, backport it or delete it.
 4. **Budget rules (§4) are hard constraints.** Burstable instances, at most 4 nodes, standard support only, no NAT gateway.
 5. **No secrets in the repo.** No keys, passwords, connection strings or tokens in `.tf`, `.tfvars`, YAML or workflows. `*.tfvars` with real values and `backend.hcl` are gitignored.

@@ -55,3 +55,9 @@ variable "owner" {
   description = "Value of the Owner tag."
   default     = "statline-iteso"
 }
+
+variable "cognito_enabled" {
+  type        = bool
+  description = "Create the Cognito user pools (module identidad, D-47). The chart's auth.mode: cognito needs them."
+  default     = true
+}

@@ -49,10 +49,13 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-39 | 2026-11-22 | Staging uses the `letsencrypt-prod` ClusterIssuer too; `letsencrypt-staging` stays for testing issuance | Decided |
 | D-40 | 2026-11-23 | Staging ingests through the fallback providers (`fallbackHabilitado: "true"`): balldontlie for NBA, TheSportsDB for NFL and Liga MX. Prod stays off | Superseded in part by D-41 |
 | D-41 | 2026-11-23 | Prod also ingests through the fallback providers for v1.0.0 (`fallbackHabilitado: "true"`), with the reasoning of D-40 | Decided |
-| D-42 | 2026-11-23 | Prod gets the synthetic `seed-demo` data too, so its models can train while no provider supplies player box scores | Decided |
+| D-42 | 2026-11-23 | Prod gets the synthetic `seed-demo` data too, so its models can train while no provider supplies player box scores | Superseded for prod by D-46; still applies to staging |
 | D-43 | 2026-11-25 | Sentry (hosted, student plan) for api, predicciones, ingesta and web; DSNs in SSM, HTTPS egress for api and predicciones, web DSN through a runtime `config.js` | Decided |
 | D-44 | 2026-11-25 | Build once, promote: main and `vX.Y.Z` tags reuse the image develop built and staging ran (re-scanned with Trivy), instead of rebuilding; pushed images carry SBOM and provenance | Decided |
 | D-45 | 2026-11-25 | `auto-merge.yml` keeps approving Ian's PRs into `develop`: two-person team, CI is the reviewer there; `main` (every release and prod bump) needs a human approval | Decided |
+| D-46 | 2026-11-25 | Prod shows live data only: `make datos ENV=prod` backfills the current seasons through the free providers, never `seed-demo`; staging keeps demo data plus the same backfill | Decided |
+| D-47 | 2026-11-25 | Amazon Cognito authenticates the app's users (module `identidad`, one pool per environment, behind `cognito_enabled`); roles stay in PostgreSQL; the chart's `auth.mode` switches the api and the SPA from `local` to `cognito` (v1.2.0) | Decided |
+| D-48 | 2026-11-25 | `make destroy-eks` destroys only the cluster and platform charts between sessions; RDS, the Cognito pools and SSM stay, so data and users survive (about USD 0.50/day) | Decided |
 
 ## 2. Details
 
@@ -237,6 +240,7 @@ Errors from the four services go to hosted Sentry (sentry.io, the GitHub Student
 - **Network:** api and predicciones get HTTPS egress to public addresses (private ranges excluded, the same rule ingesta has) only when `sentry.enabled`. Sentry ingest has no fixed IP range to allow instead.
 - **web:** the browser calls Sentry directly. A second ExternalSecret, `<release>-web-config`, renders `config.js` from the web DSN with an External Secrets template (a non-https value renders as empty). `web.yaml` mounts it over the image's empty default.
 - **Off by default** in `values.yaml` and k3d; staging and prod set `sentry.enabled: true`.
+- **Traces:** `sentry.tracesSampleRate` is `"0"` (errors only) in `values.yaml`; since 2026-11-25 staging and prod trace every request (`"1.0"`) so Sentry shows performance traces next to the errors. The web SPA stays errors only.
 
 
 ### D-44 · Build once, promote
@@ -253,10 +257,44 @@ If it finds one, it re-scans it with Trivy against today's data and adds the new
 - **Not automated:** Juan Pablo's PRs, Dependabot's PRs, and any PR touching `auto-merge.yml` itself, which runs from the base branch (`pull_request_target`).
 - **Hardening:** the workflow approves only the exact commit CI validated (`--match-head-commit`), checks out nothing from the PR, and accepts a staging bump PR only if it changes nothing but `values-staging.yaml`.
 
+
+### D-46 · Live data only in prod
+Supersedes D-42 for prod. Prod must show only real data, even if that means fewer models. Staging keeps the synthetic data (D-42), so every screen can still be shown there.
+- **Backfill:** the CronJobs only ingest yesterday and today, and every `make destroy` wipes the database. `scripts/cargar-datos.sh` (`make datos ENV=staging|prod`) runs `ingesta run <deporte> --desde <season start> --hasta <today+7>` as one-off Jobs from each CronJob spec. The daily CronJobs keep prod current after that.
+  - **Default season starts:** NBA 2026-10-20, NFL 2026-09-09, Liga MX 2026-07-16. They can be overridden with `DESDE_*`.
+  - **Scheduled games:** the 7 future days bring in upcoming games for the forecasts.
+- **Sources:**
+  - **API-Sports:** the free plan only serves yesterday to tomorrow, whatever the season, so every backfill run switches to the fallbacks (D-41).
+  - **balldontlie** (NBA): every game, no box scores.
+  - **TheSportsDB** (NFL, Liga MX): only a few games per day on the free key, no box scores.
+  - **Rate limits:** the existing retries absorb the 429s of both. NFL and Liga MX run one after the other, because they share TheSportsDB's limit.
+- **What prod can and can't show:**
+  - **Scores and standings:** real ones.
+  - **Match outcome models:** they train on scores (team form). Each needs at least 60 finished games per sport and must beat its baseline: NBA qualifies; NFL and Liga MX depend on how many games the free key returns.
+  - **Player projections:** none, because no free source has box scores. The frontend shows its empty states.
+- **Models:** `make datos` trains them and generates forecasts by calling predicciones inside the namespace, from a curl pod with the smoke label. It needs no admin login, so it keeps working if the login changes.
+- **Check:** the script ends with a summary per sport (live and demo games, finished and scheduled, active models). In prod it warns if any `demo-` game exists.
+
+### D-47 · Cognito for the app's users
+A new AWS service, approved by the team (AGENTS rule 1). Users sign up with their email, confirm it with an emailed code and reset their own password; until now the api kept the passwords and only an ADMIN could see who existed.
+- **Split of work:** Cognito authenticates; PostgreSQL keeps the `Usuario` rows and their roles. The api checks Cognito **ID tokens** against the pool's public keys (`aws-jwt-verify`) and links or creates the `Usuario` row on the first request (by `cognito_sub`, else by email). It never calls Cognito's admin API, so no pod needs IAM permissions, which the lab cannot create (D-38).
+- **Infra:** `terraform/modules/identidad`, one user pool per environment (`statline-staging`, `statline-prod`), email as username, Cognito's own email sender (about 50 emails a day, free), a public SPA client with SRP and refresh only. Pool and client ids go to SSM (`/statline/<env>/cognito-{user-pool-id,client-id}`) because they change on every apply after a destroy; External Secrets hands them to the api (Secret) and the SPA (`config.js`).
+- **Admin:** Terraform creates `admin@statline.local` in each pool with no password. `make secrets` sets a permanent one from the Keychain (`statline/admin-password`), so it never lands in the repo or the state. The password policy is length 6 with no character classes, so the demo password can be short (team decision; Cognito's minimum is 6).
+- **Rollout behind two switches:** `cognito_enabled` (Terraform) creates the pools; `auth.mode` (chart, default `local`) switches the api and the SPA. The lab allowed creating the pools on 2026-11-25, so `cognito_enabled` defaults to `true` from then on, and staging runs `auth.mode: cognito`; prod switches with v1.2.0. `local` stays for k3d, compose and CI.
+- **Egress:** in `cognito` mode the api gets HTTPS egress to the internet (the same rule as Sentry) to fetch the pool's signing keys.
+- **Limits:** every `make destroy` deletes the pools and so every user (`make destroy-eks` keeps them, D-48); the verification emails may land in spam; a short admin password is guessable while the lab is up; deleting a `Usuario` row does not delete the Cognito account, which comes back as USUARIO on its next login.
+
+### D-48 · Keep the database and the users between sessions
+`make destroy` removes the whole `principal` stack, so every session started over: the database (games, models, forecasts, watchlists, roles) and every Cognito user were gone, and `make datos` took about 20 minutes to rebuild the data. Most of the cost is the cluster: EKS, two t3.medium and the NLB bill about USD 0.20/h, while RDS db.t3.micro with 20 GB costs about USD 0.50 a day and the pools and SSM parameters nothing at our usage.
+- **`make destroy-eks`:** empties the GitOps apps, destroys `module.plataforma`, waits for the NLB, then destroys `module.eks`. Outside the module only RDS's ingress rule references the cluster (its security group); it is a separate resource (`aws_vpc_security_group_ingress_rule`), so the rule goes and the database stays. The next `make apply-eks` and `make apply` recreate the cluster and the rule.
+- **What survives:** both databases, the Cognito pools with their users and admin password, the SSM parameters (so `make secrets` has nothing new to ask), the VPC and the log groups.
+- **`make destroy`** stays for the end of the project or a clean start.
+- **Limits:** RDS bills while the cluster is down; if the lab account is reset or its budget runs out, everything is lost either way. Whether the lab stops RDS at the end of a session is not verified; a stopped instance keeps its data.
+
 ## 3. Known limitations
 
 - **Learner Lab budget and sessions** (D-38): USD 50 in all, and the keys expire with each session. `make destroy` at the end of every session; `make creds` at the start.
-- `make destroy` deletes the database. There are no backups outside the instance: dump before destroying (RUNBOOK §8).
+- `make destroy` deletes the database (`make destroy-eks` keeps it, D-48). There are no backups outside the instance: dump before a full destroy (RUNBOOK §8).
 - **No node autoscaling:** 2 fixed nodes (3 by hand with `node_count`). Pod HPAs still work inside that capacity.
 - **One availability zone** for nodes and the NLB (one Elastic IP); the control plane and RDS subnets span two.
 - **One IAM role for everything:** every pod that calls AWS uses `LabRole`, so either namespace's ExternalSecret could read the other environment's SSM parameters. The ClusterSecretStore admits only the two app namespaces.

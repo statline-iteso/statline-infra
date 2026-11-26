@@ -28,6 +28,13 @@ spec:
     metadata:
       labels:
         {{- include "statline.labels" (dict "component" $c "ctx" $ "version" $.Values.web.image.tag) | nindent 8 }}
+      {{- if include "statline.webConfig.enabled" . }}
+      annotations:
+        # config.js is mounted with subPath, so running pods never see a new one. A change to what
+        # it renders from (Sentry, auth.mode, the Cognito parameters) rolls the pods. A new value
+        # under the same SSM name (pool ids after a destroy) is fresh anyway: pods start after it.
+        statline.io/web-config: {{ dict "sentry" .Values.sentry "auth" .Values.auth "env" .Values.environment | toJson | sha256sum | trunc 16 | quote }}
+      {{- end }}
     spec:
       serviceAccountName: {{ $name }}
       automountServiceAccountToken: {{ .Values.web.serviceAccount.automount }}
@@ -62,9 +69,9 @@ spec:
               mountPath: /tmp
             - name: nginx-cache
               mountPath: /var/cache/nginx
-            {{- if .Values.sentry.enabled }}
-            # Runtime config with the Sentry DSN and environment (frontend D-07), over the image's
-            # empty default. subPath: a change applies on the next pod start.
+            {{- if include "statline.webConfig.enabled" . }}
+            # Runtime config (Sentry DSN and environment, frontend D-07; Cognito pool, D-47), over
+            # the image's empty default. subPath: a change applies on the next pod start.
             - name: web-config
               mountPath: /usr/share/nginx/html/config.js
               subPath: config.js
@@ -75,7 +82,7 @@ spec:
           emptyDir: {}
         - name: nginx-cache
           emptyDir: {}
-        {{- if .Values.sentry.enabled }}
+        {{- if include "statline.webConfig.enabled" . }}
         - name: web-config
           secret:
             secretName: {{ printf "%s-web-config" .Release.Name }}

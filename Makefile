@@ -15,7 +15,7 @@ AWS_PROFILE ?= statline-lab
 export AWS_PROFILE
 endif
 
-.PHONY: help creds check-creds bootstrap backend-config init plan apply secrets apply-eks kubeconfig destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
+.PHONY: help creds check-creds bootstrap backend-config init plan apply secrets datos apply-eks kubeconfig destroy destroy-eks output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke
 
 help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-16s %s\n",$$1,$$2}'
@@ -55,6 +55,10 @@ apply: plan ## ⚠ Apply the saved plan (creates billable resources)
 	@# The parameters exist now: API keys and Sentry DSNs from the Keychain (RUNBOOK 2.2). Never in CI.
 	@[[ -n "$${CI:-}" ]] || scripts/set-secrets.sh
 
+datos: check-creds ## Load data: make datos ENV=staging (demo + backfill) | ENV=prod (live backfill only, D-46), then models
+	@case "$(ENV)" in staging|prod) ;; *) echo "Set ENV=staging or ENV=prod"; exit 1;; esac
+	@scripts/cargar-datos.sh $(ENV)
+
 secrets: check-creds ## API keys and Sentry DSNs into SSM (Keychain, asks once), then sync and restart pods (ASK=1: ask again)
 	@scripts/set-secrets.sh
 
@@ -78,6 +82,17 @@ destroy: init ## ⚠ Destroy the principal stack (bootstrap bucket and Elastic I
 	$(TF) -chdir=$(PRINCIPAL) destroy -input=false -auto-approve -target=module.plataforma
 	scripts/esperar-nlb.sh
 	$(TF) -chdir=$(PRINCIPAL) destroy -input=false -auto-approve
+
+# Keeps RDS, the Cognito pools, SSM and the VPC (D-48). Destroying module.eks also removes what
+# references it outside the module: only RDS's ingress rule from the cluster security group, which
+# the next apply recreates for the new cluster.
+destroy-eks: init ## ⚠ Destroy only the cluster and platform charts; the database and Cognito users stay (D-48)
+	$(TF) -chdir=$(PRINCIPAL) plan -destroy -input=false -target=module.plataforma -target=module.eks
+	@[[ "$${CONFIRM:-}" == "yes" ]] || { read -rp "Destroy the cluster above (RDS and Cognito stay, ~USD 0.50/day)? [y/N] " a; [[ "$$a" == y ]]; }
+	scripts/vaciar-gitops.sh
+	$(TF) -chdir=$(PRINCIPAL) destroy -input=false -auto-approve -target=module.plataforma
+	scripts/esperar-nlb.sh
+	$(TF) -chdir=$(PRINCIPAL) destroy -input=false -auto-approve -target=module.eks
 
 output: ## Show principal outputs
 	$(TF) -chdir=$(PRINCIPAL) output
@@ -137,6 +152,3 @@ smoke: ## In-cluster smoke checks: make smoke ENV=staging|prod [RELEASE=...] (k3
 	@case "$(ENV)" in staging|prod) ;; *) echo "Set ENV=staging or ENV=prod"; exit 1;; esac
 	@ctx=$$(kubectl config current-context); case "$$ctx" in k3d-*|eks-statline*) ;; *) echo "Refusing: current context is '$$ctx', not k3d-* or eks-statline*"; exit 1;; esac
 	kubectl run statline-smoke --namespace statline-$(ENV) --rm -i --restart=Never --image=$(SMOKE_IMAGE) --labels=statline.io/smoke=true --override-type=strategic --overrides='$(SMOKE_OVERRIDES)' -- sh -s < gitops/charts/statline/files/smoke-test.sh
-
-diagram: ## Render docs/solucion.mmd → docs/solucion.png
-	npx -y @mermaid-js/mermaid-cli@11.4.0 -i docs/solucion.mmd -o docs/solucion.png -b white -w 1600
