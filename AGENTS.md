@@ -43,7 +43,7 @@ Out of scope: fantasy-platform sync (ESPN, Yahoo), betting odds, multi-region, s
 - **The lab's SCP denies some reads,** for example `s3:GetBucketObjectLockConfiguration`, which breaks `aws_s3_bucket`: S3 buckets use `awscc_s3_bucket`. The lab also denies reading its own IAM policies, so permission gaps show up on apply.
 - **Credentials expire with the session.** `make creds` at the start of each one: it writes the `statline-lab` profile (never `[default]`) and the `AWS_*` secrets of this repo for CI.
 - **No secrets in code.** Passwords come from `random_password`, go to SSM SecureStrings, and reach pods through External Secrets.
-- `make destroy` at the end of every session unless the environment must stay up (demo, review): the cluster bills about USD 0.30/h.
+- `make destroy-eks` at the end of every session unless the environment must stay up (demo, review): the cluster bills about USD 0.20/h. It keeps RDS and the Cognito pools (about USD 0.50/day, D-48); `make destroy` removes everything.
 
 ## 5. Stack
 
@@ -73,6 +73,7 @@ make apply                 # ⚠ applies the saved plan (asks for confirmation),
 make datos ENV=prod        # after Argo CD syncs: backfill live data (+ demo data in staging), then models
 make secrets               # API keys and Sentry DSNs into SSM, Cognito admin password, from the Keychain (asks once); ASK=1 asks again
 make kubeconfig            # context eks-statline
+make destroy-eks           # ⚠ destroys the cluster only; RDS, Cognito and SSM stay (D-48)
 make destroy               # ⚠ destroys principal (asks; waits for the ingress NLB before the VPC)
 make output                # principal outputs
 make lint                  # fmt check, validate, tflint, shellcheck, helm lint, kubeconform
@@ -106,7 +107,7 @@ statline-infra/
 ## 8. Rules for agents
 
 1. **Stay in scope** (§3). If a request needs a new AWS service or a new kind of resource, stop and ask.
-2. **Never run `terraform apply`, `terraform destroy`, `make apply`, `make destroy`, `kubectl apply/delete` against EKS, or `aws` commands that change resources, without explicit confirmation.** Never use the `[default]` AWS profile or a non-StatLine kubectl context. `plan`, `validate`, `tflint` and k3d are fine.
+2. **Never run `terraform apply`, `terraform destroy`, `make apply`, `make destroy`, `make destroy-eks`, `kubectl apply/delete` against EKS, or `aws` commands that change resources, without explicit confirmation.** Never use the `[default]` AWS profile or a non-StatLine kubectl context. `plan`, `validate`, `tflint` and k3d are fine.
 3. **All AWS resources go through Terraform.** If something was clicked in the console, backport it or delete it.
 4. **Budget rules (§4) are hard constraints.** Burstable instances, at most 4 nodes, standard support only, no NAT gateway.
 5. **No secrets in the repo.** No keys, passwords, connection strings or tokens in `.tf`, `.tfvars`, YAML or workflows. `*.tfvars` with real values and `backend.hcl` are gitignored.

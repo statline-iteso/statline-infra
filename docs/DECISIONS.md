@@ -55,6 +55,7 @@ What we decided, why, what we gave up, and what we'd do with more time or budget
 | D-45 | 2026-11-25 | `auto-merge.yml` keeps approving Ian's PRs into `develop`: two-person team, CI is the reviewer there; `main` (every release and prod bump) needs a human approval | Decided |
 | D-46 | 2026-11-25 | Prod shows live data only: `make datos ENV=prod` backfills the current seasons through the free providers, never `seed-demo`; staging keeps demo data plus the same backfill | Decided |
 | D-47 | 2026-11-25 | Amazon Cognito authenticates the app's users (module `identidad`, one pool per environment, behind `cognito_enabled`); roles stay in PostgreSQL; the chart's `auth.mode` switches the api and the SPA from `local` to `cognito` (v1.2.0) | Decided |
+| D-48 | 2026-11-25 | `make destroy-eks` destroys only the cluster and platform charts between sessions; RDS, the Cognito pools and SSM stay, so data and users survive (about USD 0.50/day) | Decided |
 
 ## 2. Details
 
@@ -281,12 +282,19 @@ A new AWS service, approved by the team (AGENTS rule 1). Users sign up with thei
 - **Admin:** Terraform creates `admin@statline.local` in each pool with no password. `make secrets` sets a permanent one from the Keychain (`statline/admin-password`), so it never lands in the repo or the state. The password policy is length 6 with no character classes, so the demo password can be short (team decision; Cognito's minimum is 6).
 - **Rollout behind two switches:** `cognito_enabled` (Terraform) creates the pools; `auth.mode` (chart, default `local`) switches the api and the SPA. The lab allowed creating the pools on 2026-11-25, so `cognito_enabled` defaults to `true` from then on, and staging runs `auth.mode: cognito`; prod switches with v1.2.0. `local` stays for k3d, compose and CI.
 - **Egress:** in `cognito` mode the api gets HTTPS egress to the internet (the same rule as Sentry) to fetch the pool's signing keys.
-- **Limits:** every `make destroy` deletes the pools and so every user; the verification emails may land in spam; a short admin password is guessable while the lab is up; deleting a `Usuario` row does not delete the Cognito account, which comes back as USUARIO on its next login.
+- **Limits:** every `make destroy` deletes the pools and so every user (`make destroy-eks` keeps them, D-48); the verification emails may land in spam; a short admin password is guessable while the lab is up; deleting a `Usuario` row does not delete the Cognito account, which comes back as USUARIO on its next login.
+
+### D-48 · Keep the database and the users between sessions
+`make destroy` removes the whole `principal` stack, so every session started over: the database (games, models, forecasts, watchlists, roles) and every Cognito user were gone, and `make datos` took about 20 minutes to rebuild the data. Most of the cost is the cluster: EKS, two t3.medium and the NLB bill about USD 0.20/h, while RDS db.t3.micro with 20 GB costs about USD 0.50 a day and the pools and SSM parameters nothing at our usage.
+- **`make destroy-eks`:** empties the GitOps apps, destroys `module.plataforma`, waits for the NLB, then destroys `module.eks`. Outside the module only RDS's ingress rule references the cluster (its security group); it is a separate resource (`aws_vpc_security_group_ingress_rule`), so the rule goes and the database stays. The next `make apply-eks` and `make apply` recreate the cluster and the rule.
+- **What survives:** both databases, the Cognito pools with their users and admin password, the SSM parameters (so `make secrets` has nothing new to ask), the VPC and the log groups.
+- **`make destroy`** stays for the end of the project or a clean start.
+- **Limits:** RDS bills while the cluster is down; if the lab account is reset or its budget runs out, everything is lost either way. Whether the lab stops RDS at the end of a session is not verified; a stopped instance keeps its data.
 
 ## 3. Known limitations
 
 - **Learner Lab budget and sessions** (D-38): USD 50 in all, and the keys expire with each session. `make destroy` at the end of every session; `make creds` at the start.
-- `make destroy` deletes the database. There are no backups outside the instance: dump before destroying (RUNBOOK §8).
+- `make destroy` deletes the database (`make destroy-eks` keeps it, D-48). There are no backups outside the instance: dump before a full destroy (RUNBOOK §8).
 - **No node autoscaling:** 2 fixed nodes (3 by hand with `node_count`). Pod HPAs still work inside that capacity.
 - **One availability zone** for nodes and the NLB (one Elastic IP); the control plane and RDS subnets span two.
 - **One IAM role for everything:** every pod that calls AWS uses `LabRole`, so either namespace's ExternalSecret could read the other environment's SSM parameters. The ClusterSecretStore admits only the two app namespaces.
