@@ -15,7 +15,7 @@ AWS_PROFILE ?= statline-lab
 export AWS_PROFILE
 endif
 
-.PHONY: help creds check-creds bootstrap backend-config init plan apply secrets datos apply-eks kubeconfig destroy destroy-eks output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
+.PHONY: help creds check-creds bootstrap backend-config init plan apply secrets datos apply-eks kubeconfig destroy destroy-eks output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke
 
 help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-16s %s\n",$$1,$$2}'
@@ -152,7 +152,3 @@ smoke: ## In-cluster smoke checks: make smoke ENV=staging|prod [RELEASE=...] (k3
 	@case "$(ENV)" in staging|prod) ;; *) echo "Set ENV=staging or ENV=prod"; exit 1;; esac
 	@ctx=$$(kubectl config current-context); case "$$ctx" in k3d-*|eks-statline*) ;; *) echo "Refusing: current context is '$$ctx', not k3d-* or eks-statline*"; exit 1;; esac
 	kubectl run statline-smoke --namespace statline-$(ENV) --rm -i --restart=Never --image=$(SMOKE_IMAGE) --labels=statline.io/smoke=true --override-type=strategic --overrides='$(SMOKE_OVERRIDES)' -- sh -s < gitops/charts/statline/files/smoke-test.sh
-
-diagram: ## Render docs/solucion.mmd and docs/despliegue.mmd → .png
-	npx -y @mermaid-js/mermaid-cli@11.4.0 -i docs/solucion.mmd -o docs/solucion.png -b white -w 1600
-	npx -y @mermaid-js/mermaid-cli@11.4.0 -i docs/despliegue.mmd -o docs/despliegue.png -b white -w 1800

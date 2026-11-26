@@ -60,13 +60,13 @@ Diagramas de clases con las interfaces y métodos de cada componente: [docs/comp
 
 ![Diagrama de la solución](docs/solucion.png)
 
-Verde: desplegado en AWS (staging y prod, v1.2.0). Naranja: servicio externo. Línea punteada: opcional o respaldo. Fuente en [`docs/solucion.mmd`](docs/solucion.mmd). Cada recurso de AWS, con su módulo de Terraform, está en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Línea continua: flujo principal. Línea punteada: opcional o respaldo. Cada recurso de AWS, con su módulo de Terraform, está en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Despliegue
 
 ![Diagrama de despliegue](docs/despliegue.png)
 
-Un PR a `develop` corre CI y, al mergearse, publica la imagen `:sha` y abre un PR que actualiza `values-staging.yaml`; Argo CD sincroniza staging y corre las pruebas de humo. Una release (`release/vX.Y.Z` → `main`, aprobada por el otro integrante) promueve la misma imagen a prod con un PR `gitops/bump-prod` que también requiere aprobación (D-44). Fuente en [`docs/despliegue.mmd`](docs/despliegue.mmd); los dos diagramas se generan con `make diagram`.
+Un PR a `develop` corre CI y, al mergearse, publica la imagen `:sha` y abre un PR que actualiza `values-staging.yaml`; Argo CD sincroniza staging y corre las pruebas de humo. Una release (`release/vX.Y.Z` → `main`, aprobada por el otro integrante) promueve la misma imagen a prod con un PR `gitops/bump-prod` que también requiere aprobación (D-44).
 
 ### Repositorios y ramas
 
