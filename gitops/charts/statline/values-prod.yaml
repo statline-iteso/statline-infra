@@ -32,6 +32,9 @@ secrets:
 sentry:
   enabled: true
   webDsnParameter: /statline/comun/sentry-dsn-web
+  # Every request traced (D-43): low traffic, and the presentation shows traces in Sentry. Lower it
+  # (e.g. "0.2") if the plan's span quota gets close.
+  tracesSampleRate: "1.0"
 
 # Cognito (D-47): prod signs in through its pool from v1.2.0 (this file reaches main with the
 # release; the v1.2.0 images understand it).
