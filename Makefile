@@ -142,5 +142,6 @@ smoke: ## In-cluster smoke checks: make smoke ENV=staging|prod [RELEASE=...] (k3
 	@ctx=$$(kubectl config current-context); case "$$ctx" in k3d-*|eks-statline*) ;; *) echo "Refusing: current context is '$$ctx', not k3d-* or eks-statline*"; exit 1;; esac
 	kubectl run statline-smoke --namespace statline-$(ENV) --rm -i --restart=Never --image=$(SMOKE_IMAGE) --labels=statline.io/smoke=true --override-type=strategic --overrides='$(SMOKE_OVERRIDES)' -- sh -s < gitops/charts/statline/files/smoke-test.sh
 
-diagram: ## Render docs/solucion.mmd → docs/solucion.png
+diagram: ## Render docs/solucion.mmd and docs/despliegue.mmd → .png
 	npx -y @mermaid-js/mermaid-cli@11.4.0 -i docs/solucion.mmd -o docs/solucion.png -b white -w 1600
+	npx -y @mermaid-js/mermaid-cli@11.4.0 -i docs/despliegue.mmd -o docs/despliegue.png -b white -w 1800

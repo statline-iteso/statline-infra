@@ -77,7 +77,7 @@ make destroy               # ⚠ destroys principal (asks; waits for the ingress
 make output                # principal outputs
 make lint                  # fmt check, validate, tflint, shellcheck, helm lint, kubeconform
 make k3d-up / k3d-down     # local cluster with ingress-nginx and the three namespaces
-make diagram               # docs/solucion.mmd → docs/solucion.png
+make diagram               # docs/solucion.mmd and docs/despliegue.mmd → .png
 ```
 
 ## 7. Repository layout
@@ -85,7 +85,7 @@ make diagram               # docs/solucion.mmd → docs/solucion.png
 ```
 statline-infra/
 ├── AGENTS.md · CLAUDE.md · README.md · Makefile · mise.toml
-├── docs/                    ARCHITECTURE · CONVENTIONS · DECISIONS · BACKLOG · RUNBOOK · modelo-datos · api · pendientes · planning/
+├── docs/                    ARCHITECTURE · CONVENTIONS · DECISIONS · BACKLOG · RUNBOOK · modelo-datos · api · componentes · despliegue · pendientes · planning/
 ├── terraform/
 │   ├── bootstrap/           S3 state bucket (awscc) + ingress Elastic IP (local state)
 │   ├── principal/           the environment: calls the modules below

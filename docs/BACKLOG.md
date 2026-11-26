@@ -1,6 +1,6 @@
 # StatLine Backlog
 
-The whole project backlog (proposal §6): **61 issues, 277 story points, nine epics**. Each issue lives in the repo that owns the work; the [GitHub Project](https://github.com/orgs/statline-iteso/projects) shows all of them on one board with the fields Épica, Sprint, Estimación and Prioridad. Per-repo views: [backend](https://github.com/statline-iteso/statline-backend/blob/develop/docs/BACKLOG.md) · [frontend](https://github.com/statline-iteso/statline-frontend/blob/develop/docs/BACKLOG.md).
+The whole project backlog (proposal §6): **61 issues, 277 story points, nine epics**. Each issue lives in the repo that owns the work; the [GitHub Project](https://github.com/orgs/statline-iteso/projects/1) shows all of them on one board with the fields Épica, Sprint, Estimación and Prioridad. Per-repo views: [backend](https://github.com/statline-iteso/statline-backend/blob/develop/docs/BACKLOG.md) · [frontend](https://github.com/statline-iteso/statline-frontend/blob/develop/docs/BACKLOG.md).
 
 **Progress:** 60 of 61 issues done · 273 of 277 points.
 

@@ -1,0 +1,82 @@
+%% Diagrama de despliegue (v1.2.0). Render: make diagram  →  docs/despliegue.png
+flowchart TB
+    classDef k8s fill:#e7f5ff,stroke:#1c7ed6,color:#0b2e4f
+    classDef aws fill:#fff4e6,stroke:#e8590c,color:#5c2a00
+    classDef ext fill:#f3f0ff,stroke:#7048e8,color:#24135f
+    classDef ci fill:#ebfbee,stroke:#2b8a3e,color:#0b3d17
+
+    subgraph DEV["Desarrollo · GitHub statline-iteso"]
+        direction LR
+        PR["PR feature/* → develop<br/>ci.yml: lint · pruebas ≥ 70 % · Trivy"]:::ci
+        CD["cd.yml (backend, frontend)<br/>imagen :sha · SBOM"]:::ci
+        REL["release/vX.Y.Z → main<br/>aprobación humana · tag vX.Y.Z"]:::ci
+        BUMP["cd.yml (infra)<br/>PR gitops/bump-staging (auto)<br/>PR gitops/bump-prod (aprobación)"]:::ci
+        PR --> CD
+        REL -->|promueve la misma imagen, D-44| CD
+        CD -->|repository_dispatch| BUMP
+    end
+
+    HUB[("Docker Hub<br/>pardosito/web · api<br/>predicciones · ingesta")]:::ext
+    CD -->|push| HUB
+
+    subgraph AWS["AWS Learner Lab · us-east-1 · Terraform (statline-infra)"]
+        direction TB
+        EIP["IP elástica + NLB<br/>staging.&lt;ip&gt;.nip.io · &lt;ip&gt;.nip.io"]:::aws
+        subgraph EKS["EKS 1.35 · 2 × t3.medium · LabRole"]
+            direction TB
+            subgraph PLAT["namespace plataforma"]
+                NGINX["ingress-nginx<br/>+ cert-manager (Let's Encrypt)"]:::k8s
+                ARGO["Argo CD<br/>develop → staging · main → prod"]:::k8s
+                ESO["External Secrets<br/>ClusterSecretStore SSM"]:::k8s
+                MON["kube-prometheus-stack<br/>Prometheus · Grafana"]:::k8s
+                REDIS[("Redis 7<br/>StatefulSet")]:::k8s
+            end
+            subgraph STG["namespace statline-staging (Dev)"]
+                direction LR
+                SW["Deployment web ×2"]:::k8s
+                SA["Deployment api ×2<br/>HPA 2–6 · initContainers migrate, seed"]:::k8s
+                SP["Deployment predicciones<br/>HPA 1–4"]:::k8s
+                SC["CronJobs ingesta ×3"]:::k8s
+            end
+            subgraph PRD["namespace statline-prod (Prod)"]
+                direction LR
+                PW["Deployment web ×2"]:::k8s
+                PA["Deployment api ×2<br/>HPA 2–6"]:::k8s
+                PP["Deployment predicciones<br/>HPA 1–4"]:::k8s
+                PC["CronJobs ingesta ×3"]:::k8s
+            end
+        end
+        RDS[("RDS PostgreSQL 16<br/>statline_staging · statline_prod<br/>subredes privadas")]:::aws
+        SSM["SSM Parameter Store<br/>secretos · DSNs · ids de Cognito"]:::aws
+        COG["Cognito<br/>pool statline-staging · statline-prod"]:::aws
+        CW["CloudWatch Logs<br/>EKS · RDS"]:::aws
+        S3[("S3 · estado de Terraform")]:::aws
+    end
+
+    SENTRY["Sentry (APM)<br/>errores · trazas · Crons"]:::ext
+    PROV["API-Sports · balldontlie · TheSportsDB"]:::ext
+    USR(["Navegador"])
+
+    BUMP -->|values-staging.yaml / values-prod.yaml| ARGO
+    ARGO -->|sync + smoke PostSync| STG
+    ARGO -->|sync + smoke PostSync| PRD
+    HUB -->|pull| STG
+    HUB -->|pull| PRD
+    USR -->|HTTPS| EIP --> NGINX
+    NGINX -->|/ y /api| STG
+    NGINX -->|/ y /api| PRD
+    USR -->|SRP · registro · código| COG
+    SSM --> ESO -->|Secret statline-secrets + config.js| STG
+    ESO --> PRD
+    STG -->|5432| RDS
+    PRD -->|5432| RDS
+    STG -.->|caché| REDIS
+    PRD -.->|caché| REDIS
+    SC -->|HTTPS| PROV
+    PC -->|HTTPS| PROV
+    STG -->|HTTPS| SENTRY
+    PRD -->|HTTPS| SENTRY
+    MON -->|/metrics| STG
+    MON -->|/metrics| PRD
+    EKS --> CW
+    RDS --> CW
