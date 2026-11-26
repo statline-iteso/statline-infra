@@ -16,11 +16,11 @@ terraform {
     # stack. See README ("First apply") and `make apply-eks`.
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.33"
+      version = "~> 3.5"
     }
     helm = {
       source  = "hashicorp/helm"
-      version = "~> 2.16"
+      version = "~> 3.3"
     }
   }
 
