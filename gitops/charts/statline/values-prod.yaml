@@ -47,7 +47,7 @@ auth:
 # Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
 web:
   image:
-    tag: "v1.1.0"
+    tag: "v1.2.0"
 api:
   autoscaling:
     enabled: true
