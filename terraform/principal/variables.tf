@@ -59,5 +59,5 @@ variable "owner" {
 variable "cognito_enabled" {
   type        = bool
   description = "Create the Cognito user pools (module identidad, D-47). The chart's auth.mode: cognito needs them."
-  default     = false
+  default     = true
 }
