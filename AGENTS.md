@@ -78,7 +78,6 @@ make destroy               # ⚠ destroys principal (asks; waits for the ingress
 make output                # principal outputs
 make lint                  # fmt check, validate, tflint, shellcheck, helm lint, kubeconform
 make k3d-up / k3d-down     # local cluster with ingress-nginx and the three namespaces
-make diagram               # docs/solucion.mmd and docs/despliegue.mmd → .png
 ```
 
 ## 7. Repository layout
