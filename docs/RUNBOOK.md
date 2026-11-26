@@ -118,7 +118,7 @@ Grafana: `kubectl -n plataforma port-forward svc/kube-prometheus-stack-grafana 3
 
 ## 3. First data and models
 
-Each environment has its own database, and `make destroy` wipes both. After every `make apply`, once Argo CD has synced the environment, load its data:
+Each environment has its own database, and `make destroy` wipes both. After a `make apply` that followed `make destroy`, once Argo CD has synced the environment, load its data (after `make destroy-eks` the data is still there: skip this section):
 
 ```bash
 make datos ENV=staging    # demo data (D-42) + backfill of the current seasons + models
@@ -272,6 +272,17 @@ Staging and prod use `syncPolicy.retry.limit: 2` with backoff from 10 s (factor 
 
 ## 8. Tear down (end of every session)
 
+Two ways, both asking before they run:
+
+| | `make destroy-eks` (D-48) | `make destroy` |
+|---|---|---|
+| Removes | the platform charts, the ingress NLB, EKS and the nodes | the whole `principal` stack |
+| Keeps | RDS (both databases), the Cognito pools and their users, SSM parameters (API keys, DSNs, pool ids), the VPC, CloudWatch log groups | only the bootstrap pair |
+| Cost while down | about USD 0.50/day (RDS) | about USD 0.12/day (Elastic IP) |
+| Next session | `make creds` → `make apply-eks` → `make plan` → `make apply` → Argo CD; **no `make datos`**, the CronJobs fill the missing days | the same, plus `make datos` for each environment and new sign-ups |
+
+Use `make destroy-eks` between sessions and `make destroy` when the project is done or the data does not matter. `make apply` after `make destroy-eks` recreates RDS's ingress rule for the new cluster; the database Job finds both databases and leaves them, and the api's initContainers run only pending migrations.
+
 `make destroy` removes the whole `principal` stack, the database included (D-16). The S3 state bucket and the Elastic IP from `make bootstrap` stay (the IP keeps the nip.io hosts valid, about USD 3.60/month), so the next session needs only `make creds`, `make apply-eks` and `make apply`. The destroy first deletes the Argo CD Applications and ExternalSecrets while their controllers still run (`scripts/vaciar-gitops.sh`), then removes the platform charts and waits for the ingress NLB to disappear (`scripts/esperar-nlb.sh`); otherwise its network interfaces would block deleting the VPC.
 
 1. **Keep the data, if it matters.** PostgreSQL is private and the namespaces are default-deny, so dump from a Job built from the NBA CronJob: it keeps the labels the PostgreSQL egress rule allows and `DATABASE_URL` from `statline-secrets`; only the image and the command change.
@@ -287,13 +298,14 @@ Staging and prod use `syncPolicy.retry.limit: 2` with backoff from 10 s (factor 
    Restore after the next `make apply` (and after the api pods have migrated) the same way, with the file mounted from a ConfigMap or piped through `kubectl exec -i` into `psql "$DATABASE_URL"`. Dumps hold user emails and password hashes: keep them out of the repo.
 2. **Destroy.**
    ```bash
-   make destroy                      # shows the destroy plan, asks before running (~15 min)
+   make destroy-eks                  # cluster only; RDS and Cognito stay (D-48), ~12 min
+   make destroy                      # or everything: shows the destroy plan, asks before running (~15 min)
    kubectl config delete-context eks-statline
    ```
 3. Check nothing billable is left but the bootstrap pair:
    ```bash
    aws eks list-clusters --query clusters                       # []
-   aws rds describe-db-instances --query 'DBInstances[].DBInstanceIdentifier'   # []
+   aws rds describe-db-instances --query 'DBInstances[].DBInstanceIdentifier'   # [] (["statline"] after destroy-eks)
    aws elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerName' # []
    aws ec2 describe-instances --filters Name=instance-state-name,Values=running --query 'Reservations[].Instances[].InstanceId'   # []
    ```

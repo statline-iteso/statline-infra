@@ -15,7 +15,7 @@ AWS_PROFILE ?= statline-lab
 export AWS_PROFILE
 endif
 
-.PHONY: help creds check-creds bootstrap backend-config init plan apply secrets datos apply-eks kubeconfig destroy output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
+.PHONY: help creds check-creds bootstrap backend-config init plan apply secrets datos apply-eks kubeconfig destroy destroy-eks output fmt validate tflint helm-lint helm-validate lint k3d-up k3d-down k3d-deploy smoke diagram
 
 help: ## List targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-16s %s\n",$$1,$$2}'
@@ -82,6 +82,17 @@ destroy: init ## ⚠ Destroy the principal stack (bootstrap bucket and Elastic I
 	$(TF) -chdir=$(PRINCIPAL) destroy -input=false -auto-approve -target=module.plataforma
 	scripts/esperar-nlb.sh
 	$(TF) -chdir=$(PRINCIPAL) destroy -input=false -auto-approve
+
+# Keeps RDS, the Cognito pools, SSM and the VPC (D-48). Destroying module.eks also removes what
+# references it outside the module: only RDS's ingress rule from the cluster security group, which
+# the next apply recreates for the new cluster.
+destroy-eks: init ## ⚠ Destroy only the cluster and platform charts; the database and Cognito users stay (D-48)
+	$(TF) -chdir=$(PRINCIPAL) plan -destroy -input=false -target=module.plataforma -target=module.eks
+	@[[ "$${CONFIRM:-}" == "yes" ]] || { read -rp "Destroy the cluster above (RDS and Cognito stay, ~USD 0.50/day)? [y/N] " a; [[ "$$a" == y ]]; }
+	scripts/vaciar-gitops.sh
+	$(TF) -chdir=$(PRINCIPAL) destroy -input=false -auto-approve -target=module.plataforma
+	scripts/esperar-nlb.sh
+	$(TF) -chdir=$(PRINCIPAL) destroy -input=false -auto-approve -target=module.eks
 
 output: ## Show principal outputs
 	$(TF) -chdir=$(PRINCIPAL) output
