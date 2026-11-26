@@ -89,8 +89,8 @@ module "seguridad" {
   database_urls = module.datos.database_urls
 }
 
-# Cognito user pools for the app's users (D-47). Off by default until the lab is confirmed to allow
-# Cognito: make apply TF_VAR_cognito_enabled=true (or cognito_enabled in terraform.tfvars).
+# Cognito user pools for the app's users (D-47). On since 2026-11-25 (the lab allows Cognito);
+# cognito_enabled = false would delete the pools and every user in them.
 module "identidad" {
   count  = var.cognito_enabled ? 1 : 0
   source = "../modules/identidad"
