@@ -104,7 +104,7 @@ El backlog del plan (61 issues, 277 puntos, 9 épicas) está terminado salvo la 
 | Sesión del lab (cada vez) | `make creds` (pega el bloque de AWS Details) | 1 min |
 | Cuenta del lab nueva (una vez) | `make bootstrap` | ~3 min |
 | Infraestructura en AWS | `make apply-eks` → `make plan` → `make apply` → `make kubeconfig` | ~25 min |
-| Al terminar | `make destroy` (EKS, nodos, RDS y el NLB cuestan ~USD 0.30/h del presupuesto de USD 50) | ~15 min |
+| Al terminar | `make destroy-eks`: borra el clúster y conserva la base de datos y los usuarios de Cognito (~USD 0.50/día). `make destroy` borra todo | ~12 min |
 | Sin AWS | backend: `docker compose up -d --wait` y `pnpm --filter @statline/api dev` en su repo; frontend: `pnpm dev` | 2 min |
 | Clúster local | `make k3d-up` / `make k3d-down` | ~2 min |
 
@@ -172,7 +172,7 @@ cluster alone first, so every later plan sees a real cluster (decision D-24).
 **Argo CD UI** (no public Ingress yet): `kubectl -n plataforma port-forward svc/argo-cd-argocd-server 8080:80`.
 
 > [!WARNING]
-> **Run `make destroy` when you are done for the day** unless the cluster must stay up. The EKS control plane, 2 × t3.medium, RDS and the NLB bill about USD 0.30/h against the USD 50 lab budget. `make destroy` removes the platform charts first, waits for the ingress NLB to go, then destroys the rest. The bootstrap bucket and the Elastic IP stay (cents, plus ~USD 3.60/month for the IP).
+> **Run `make destroy-eks` when you are done for the day** unless the cluster must stay up: it removes the cluster and keeps RDS and the Cognito users, so the next session needs no data load (D-48). `make destroy` removes everything. The EKS control plane, 2 × t3.medium, RDS and the NLB bill about USD 0.30/h against the USD 50 lab budget. `make destroy` removes the platform charts first, waits for the ingress NLB to go, then destroys the rest. The bootstrap bucket and the Elastic IP stay (cents, plus ~USD 3.60/month for the IP).
 
 ### Recovering the bootstrap state
 

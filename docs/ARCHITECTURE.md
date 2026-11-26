@@ -235,7 +235,7 @@ Nothing else is allowed: web has no egress beyond DNS, ingesta has no ingress, a
 | Task | How |
 |---|---|
 | First deploy | `make creds` → `make bootstrap` → `make apply-eks` → `make plan` → `make apply` → `make kubeconfig` (D-24, RUNBOOK §2) |
-| Daily stop | `make destroy` (data is lost unless dumped first, RUNBOOK §8). It removes the platform charts, waits for the ingress NLB to go, then destroys the rest |
+| Daily stop | `make destroy-eks`: removes the platform charts, waits for the ingress NLB to go, then destroys EKS; RDS, Cognito and SSM stay (D-48). `make destroy` removes everything (data is lost unless dumped first, RUNBOOK §8) |
 | DB shell | `kubectl run psql --rm -it --image=postgres:16-alpine -- psql "$DATABASE_URL"` |
 | Rotate a secret | `aws ssm put-parameter --overwrite`; External Secrets re-syncs within 1 h (or annotate the ExternalSecret `force-sync=$(date +%s)`); restart the Deployment |
 | Local cluster | `make k3d-up`, then `make k3d-deploy` (Redis and the chart with `values-k3d.yaml`); the README in `gitops/` has the full steps |
