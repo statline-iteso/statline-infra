@@ -47,24 +47,24 @@ auth:
 # Image tags: bumped by cd.yml (repository_dispatch from the app repos). Do not edit by hand.
 web:
   image:
-    tag: "94caf83"
+    tag: "32d6435"
 api:
   autoscaling:
     enabled: true
   image:
-    tag: "ff7e7fa"
+    tag: "fc5ab26"
 predicciones:
   autoscaling:
     enabled: true
   image:
-    tag: "ff7e7fa"
+    tag: "fc5ab26"
 ingesta:
   config:
     # On since D-40: the free API-Sports plan answers nothing, so the fallbacks are the only real data
     # and no game can arrive from two providers. Prod too since D-41.
     fallbackHabilitado: "true"
   image:
-    tag: "ff7e7fa"
+    tag: "fc5ab26"
 
 monitoring:
   enabled: true
